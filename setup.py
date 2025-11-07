@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="django-ses-tracking",
-    version="1.0.0",  # Update this for each release
+    version="1.0.2",  # Update this for each release
     author="Canusia",
     author_email="info@canusia.com",
     description="Django app for tracking AWS SES email events (bounces, complaints, deliveries)",
@@ -33,7 +33,7 @@ setup(
         "Django>=3.2",
         "boto3>=1.26.0",
         "python-dateutil>=2.8.0",
-        "django-mailer>=2.3.0",
+        "django-mailer>=2.1",
     ],
     include_package_data=True,
     zip_safe=False,
