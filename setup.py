@@ -1,18 +1,19 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name="django-ses-tracking",
-    version="1.0.2",  # Update this for each release
+    version="1.0.3",
     author="Canusia",
     author_email="info@canusia.com",
     description="Django app for tracking AWS SES email events (bounces, complaints, deliveries)",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Canusia/package_ses_tracking",
-    packages=find_packages(),
+    packages=['ses_tracking'],  # Explicitly name the package
+    package_dir={'ses_tracking': '.'},  # Tell it the package is at root
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
