@@ -12,8 +12,16 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Canusia/package_ses_tracking",
-    packages=['ses_tracking'],  # Explicitly name the package
-    package_dir={'ses_tracking': '.'},  # Tell it the package is at root
+    packages=['ses_tracking'],
+    package_dir={'ses_tracking': '.'},
+    package_data={
+        'ses_tracking': [
+            'migrations/*.py',
+            'migrations/__pycache__/*',
+        ],
+    },
+    include_package_data=True,
+    zip_safe=False,
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -36,6 +44,4 @@ setup(
         "python-dateutil>=2.8.0",
         "django-mailer>=2.1",
     ],
-    include_package_data=True,
-    zip_safe=False,
 )
