@@ -1,8 +1,8 @@
 
-
 # ses_tracking/views.py
 import json
 import logging
+from django.utils import timezone
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -11,7 +11,6 @@ import boto3
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
-
 
 @csrf_exempt
 @require_POST
@@ -70,7 +69,7 @@ def sns_endpoint(request):
     except Exception as e:
         logger.error(f"Error processing SNS notification: {str(e)}", exc_info=True)
         return HttpResponse('Error processing notification', status=500)
-sns_endpoint.login_required = False
+
 
 def handle_bounce(message):
     """Process bounce notifications"""
