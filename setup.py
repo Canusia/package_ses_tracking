@@ -16,6 +16,9 @@ setup(
     package_dir={'ses_tracking': '.'},
     package_data={
         'ses_tracking': [
+            'templates/ses_tracking/*.html',
+            'static/ses_tracking/css/*.css',
+            'static/ses_tracking/js/*.js',
             'migrations/*.py',
             'migrations/__pycache__/*',
         ],
