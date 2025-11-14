@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="django-ses-tracking",
-    version="1.0.3",
+    version="1.0.6",
     author="Canusia",
     author_email="info@canusia.com",
     description="Django app for tracking AWS SES email events (bounces, complaints, deliveries)",
@@ -14,16 +14,7 @@ setup(
     url="https://github.com/Canusia/package_ses_tracking",
     packages=['ses_tracking'],
     package_dir={'ses_tracking': '.'},
-    package_data={
-        'ses_tracking': [
-            'templates/ses_tracking/*.html',
-            'static/ses_tracking/css/*.css',
-            'static/ses_tracking/js/*.js',
-            'migrations/*.py',
-            'migrations/__pycache__/*',
-        ],
-    },
-    include_package_data=True,
+    include_package_data=True,  # This uses MANIFEST.in
     zip_safe=False,
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -46,5 +37,6 @@ setup(
         "boto3>=1.26.0",
         "python-dateutil>=2.8.0",
         "django-mailer>=2.1",
+        "djangorestframework>=3.12.0",
     ],
 )
