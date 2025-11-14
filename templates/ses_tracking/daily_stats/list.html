@@ -34,7 +34,7 @@
 
                                 <div class="row">                                    
                                     <div class="col-md-12 mb-3">
-                        <div class="card">
+                        <div class="">
                             <div class="mt-2">
                                 <style>
         .container {
@@ -83,7 +83,7 @@
                     <th>Complaints</th>
                     <th>Bounce Rate</th>
                     <th>Complaint Rate</th>
-                    <th>Delivery Rate</th>
+                    <!-- <th>Delivery Rate</th> -->
                     <th>Recipients</th>
                 </tr>
             </thead>
@@ -195,7 +195,7 @@
                             return '<span class="' + cssClass + '">' + rate.toFixed(2) + '%</span>';
                         }
                     },
-                    { 
+                    /*{ 
                         data: 'delivery_rate',
                         render: function(data, type, row) {
                             var rate = parseFloat(data);
@@ -211,7 +211,7 @@
                             
                             return '<span class="' + cssClass + '">' + rate.toFixed(2) + '%</span>';
                         }
-                    },
+                    },*/
                     { 
                         data: 'unique_recipients',
                         render: $.fn.dataTable.render.number(',', '.', 0)
