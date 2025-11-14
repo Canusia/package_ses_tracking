@@ -98,7 +98,13 @@
 
                     <!-- Bounces Only Tab -->
                     <div class="tab-pane" id="bounces">
-                        <div class="card border-0">
+                        
+                        <div class="bg-white border border-top-0">
+                            <div class="col-12 pt-3 mb-3">
+
+                                <div class="row">                                    
+                                    <div class="col-md-12 mb-3">
+                        <div class="">
                             <div class="mt-2">
                                 <!-- Date Range Filter for Bounces -->
                                 <div class="row mb-3">
@@ -130,11 +136,21 @@
                                 </table>
                             </div>
                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Complaints Only Tab -->
                     <div class="tab-pane" id="complaints">
-                        <div class="card border-0">
+                        
+                        <div class="bg-white border border-top-0">
+                            <div class="col-12 pt-3 mb-3">
+
+                                <div class="row">                                    
+                                    <div class="col-md-12 mb-3">
+                        <div class="">
                             <div class="mt-2">
                                 <!-- Date Range Filter for Complaints -->
                                 <div class="row mb-3">
@@ -165,6 +181,10 @@
                                 </table>
                             </div>
                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -174,6 +194,30 @@
 
 <script>
 $(document).ready(function() {
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const dateParam = urlParams.get('date');
+    const tabParam = urlParams.get('tab');
+    
+    // If date parameter exists, pre-fill the date filters
+    if (dateParam) {
+        $('#startDate').val(dateParam);
+        $('#endDate').val(dateParam);
+        $('#startDateBounces').val(dateParam);
+        $('#endDateBounces').val(dateParam);
+        $('#startDateComplaints').val(dateParam);
+        $('#endDateComplaints').val(dateParam);
+    }
+    
+    // If tab parameter exists, switch to that tab
+    if (tabParam) {
+        if (tabParam === 'bounces') {
+            $('a[href="#bounces"]').tab('show');
+        } else if (tabParam === 'complaints') {
+            $('a[href="#complaints"]').tab('show');
+        }
+    }
+    
     // Get CSRF token
     function getCookie(name) {
         let cookieValue = null;

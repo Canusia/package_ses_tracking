@@ -646,7 +646,7 @@ class BouncesComplaintsListView(View):
     View for displaying bounces and complaints
     """
     def get(self, request, *args, **kwargs):
-        menu = draw_menu(cis_menu, 'ses_bounces_complaints', '')
+        menu = draw_menu(cis_menu, 'ses_daily_stats', 'ses_bounces_complaints')
         return render(request, 'ses_tracking/bounces_complaints/list.html', {
             'menu': menu,
             'page_title': 'Bounces & Complaints',
@@ -657,7 +657,7 @@ class DailyEmailStatsListView(View):
 
     def get(self, request, *args, **kwargs):
 
-        menu = draw_menu(cis_menu, 'ses_daily_stats', '')
+        menu = draw_menu(cis_menu, 'ses_daily_stats', 'ses_daily_stats')
         return render(request, 'ses_tracking/daily_stats/list.html', {
             'menu': menu,
             'page_title': 'Daily Email Stats',

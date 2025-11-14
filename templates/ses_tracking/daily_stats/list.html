@@ -155,11 +155,25 @@
                     },
                     { 
                         data: 'total_bounces',
-                        render: $.fn.dataTable.render.number(',', '.', 0)
+                        render: function(data, type, row) {
+                            if (data > 0) {
+                                // Create clickable link to bounces page with date filter
+                                return '<a href="/ses/webhooks/sns/bounces-complaints/?date=' + row.date + '&tab=bounces">' + 
+                                       data.toLocaleString('en-US') + '</a>';
+                            }
+                            return data.toLocaleString('en-US');
+                        }
                     },
                     { 
                         data: 'total_complaints',
-                        render: $.fn.dataTable.render.number(',', '.', 0)
+                        render: function(data, type, row) {
+                            if (data > 0) {
+                                // Create clickable link to complaints page with date filter
+                                return '<a href="/ses/webhooks/sns/bounces-complaints/?date=' + row.date + '&tab=complaints">' + 
+                                       data.toLocaleString('en-US') + '</a>';
+                            }
+                            return data.toLocaleString('en-US');
+                        }
                     },
                     { 
                         data: 'bounce_rate',
