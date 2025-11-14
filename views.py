@@ -69,7 +69,7 @@ def sns_endpoint(request):
     except Exception as e:
         logger.error(f"Error processing SNS notification: {str(e)}", exc_info=True)
         return HttpResponse('Error processing notification', status=500)
-
+sns_endpoint.login_required = False
 
 def handle_bounce(message):
     """Process bounce notifications"""
