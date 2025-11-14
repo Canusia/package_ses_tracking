@@ -1,5 +1,6 @@
 include README.md
 include LICENSE
+recursive-include templates *.html
 recursive-include migrations *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
