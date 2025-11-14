@@ -21,10 +21,13 @@ class SESEvent(models.Model):
         ('Undetermined', 'Undetermined'),
     ]
     
+
     event_type = models.CharField(max_length=20, choices=EVENT_TYPES, db_index=True)
     message_id = models.CharField(max_length=255, db_index=True)  # SES message ID
     email_message_id = models.CharField(max_length=500, null=True, blank=True, db_index=True)  # Email Message-ID header
     email = models.EmailField(db_index=True)
+    email_subject = models.CharField(max_length=500, null=True, blank=True, db_index=True)  # Email Subject
+    email_to = models.TextField(null=True, blank=True)  # To addresses (can be multiple, comma-separated)
     
     # Bounce specific
     bounce_type = models.CharField(max_length=20, choices=BOUNCE_TYPES, null=True, blank=True)
@@ -50,6 +53,43 @@ class SESEvent(models.Model):
         return f"{self.event_type.title()} - {self.email} - {self.timestamp}"
     
     @property
+    def extract_email_subject(self):
+        """Extract Subject from raw message headers"""
+        try:
+            # Try commonHeaders first (cleaner)
+            subject = self.raw_message.get('mail', {}).get('commonHeaders', {}).get('subject')
+            if subject:
+                return subject
+            
+            # Fallback to headers array
+            headers = self.raw_message.get('mail', {}).get('headers', [])
+            for header in headers:
+                if header.get('name') == 'Subject':
+                    return header.get('value', '')
+        except (AttributeError, KeyError):
+            pass
+        return None
+    
+    @property
+    def extract_email_to(self):
+        """Extract To addresses from raw message"""
+        try:
+            # Try commonHeaders first (cleaner, returns list)
+            to_addresses = self.raw_message.get('mail', {}).get('commonHeaders', {}).get('to')
+            if to_addresses:
+                # Join list into comma-separated string
+                return ', '.join(to_addresses)
+            
+            # Fallback to headers array
+            headers = self.raw_message.get('mail', {}).get('headers', [])
+            for header in headers:
+                if header.get('name') == 'To':
+                    return header.get('value', '')
+        except (AttributeError, KeyError):
+            pass
+        return None
+    
+    @property
     def extract_email_message_id(self):
         """Extract Message-ID from raw message headers"""
         try:
@@ -64,9 +104,13 @@ class SESEvent(models.Model):
         return None
     
     def save(self, *args, **kwargs):
-        """Extract and save email_message_id before saving"""
+        """Extract and save email metadata before saving"""
         if not self.email_message_id and self.raw_message:
             self.email_message_id = self.extract_email_message_id
+        if not self.email_subject and self.raw_message:
+            self.email_subject = self.extract_email_subject
+        if not self.email_to and self.raw_message:
+            self.email_to = self.extract_email_to
         super().save(*args, **kwargs)
 
 
@@ -116,10 +160,13 @@ class DailyEmailStats(models.Model):
     
     def calculate_rates(self):
         """Calculate bounce, complaint, and delivery rates"""
-        if self.total_sends > 0:
-            self.bounce_rate = (self.total_bounces / self.total_sends) * 100
-            self.complaint_rate = (self.total_complaints / self.total_sends) * 100
-            self.delivery_rate = (self.total_deliveries / self.total_sends) * 100
+        # Use deliveries as the base if sends is 0 (SES might not track sends)
+        base_count = self.total_sends if self.total_sends > 0 else self.total_deliveries
+        
+        if base_count > 0:
+            self.bounce_rate = (self.total_bounces / base_count) * 100
+            self.complaint_rate = (self.total_complaints / base_count) * 100
+            self.delivery_rate = (self.total_deliveries / base_count) * 100
         else:
             self.bounce_rate = 0
             self.complaint_rate = 0

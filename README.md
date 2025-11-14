@@ -7,9 +7,12 @@ A Django app for tracking AWS SES email events including bounces, complaints, de
 - 📧 Tracks all AWS SES email events
 - 🔔 Automatic SNS webhook subscription confirmation
 - 📊 Django admin interface for viewing events
+- 📈 Daily statistics aggregation with management command
 - 🔌 Custom email backend with automatic configuration set injection
 - 🚀 Works seamlessly with django-mailer
 - 🎯 Separate tracking per app/environment
+- 🌐 RESTful API with DataTables integration
+- 📱 Responsive web interface for viewing stats, bounces, and complaints
 
 ## Installation
 
@@ -19,6 +22,7 @@ pip install git+https://github.com/Canusia/package_ses_tracking.git@v1.0.0
 ```
 
 Or add to your `requirements.txt`:
+git+https://github.com/Canusia/package_ses_tracking.git@v1.0.0
 
 ### Via Git Submodule (Development)
 ```bash
@@ -39,6 +43,7 @@ pip install -e ./package_ses_tracking
 # settings.py
 INSTALLED_APPS = [
     # ... other apps
+    'rest_framework',  # Required for API views
     'ses_tracking',
 ]
 ```
@@ -59,6 +64,12 @@ EMAIL_HOST_PASSWORD = 'your-smtp-password'
 # SES Configuration
 AWS_SES_REGION = 'us-east-1'
 AWS_SES_CONFIGURATION_SET = 'your-config-set-name'
+
+# Optional: DRF Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 25,
+}
 ```
 
 ### 3. Add URL Patterns
@@ -85,6 +96,8 @@ Your webhook URL will be: `https://yourdomain.com/webhooks/sns/ses-events/`
 
 ## Usage
 
+### Sending Emails
+
 Once configured, all emails sent through your Django app will automatically:
 - Include the SES configuration set header
 - Trigger SNS notifications for events
@@ -103,6 +116,126 @@ send_html_mail(
     settings.DEFAULT_FROM_EMAIL,
     ['recipient@example.com']
 )
+```
+
+### Daily Statistics Aggregation
+
+Aggregate email events into daily statistics:
+```bash
+# Process yesterday's data (run daily via cron)
+python manage.py aggregate_daily_stats
+
+# Process specific date
+python manage.py aggregate_daily_stats --date 2025-11-07
+
+# Process multiple days
+python manage.py aggregate_daily_stats --days 7
+
+# Force regeneration
+python manage.py aggregate_daily_stats --force
+```
+
+**Set up cron job** (run at 1 AM daily):
+```bash
+0 1 * * * /path/to/venv/bin/python /path/to/project/manage.py aggregate_daily_stats
+```
+
+### Web Interface Views
+
+The package includes two ready-to-use views with DataTables integration:
+
+#### 1. Daily Statistics View
+```python
+# your_app/views.py
+from django.views import View
+from django.shortcuts import render
+
+class DailyEmailStatsListView(View):
+    def get(self, request, *args, **kwargs):
+        return render(request, 'ses_tracking/daily_stats/list.html', {
+            'page_title': 'Daily Email Stats',
+            'api_url': '/webhooks/api/stats/',
+        })
+
+# urls.py
+urlpatterns = [
+    path('email-stats/', DailyEmailStatsListView.as_view(), name='email-stats'),
+]
+```
+
+Access at: `https://yourdomain.com/email-stats/`
+
+**Features:**
+- View daily aggregated statistics
+- Date range filtering
+- Sortable columns
+- Color-coded bounce/complaint/delivery rates
+- Server-side pagination
+
+#### 2. Bounces & Complaints View
+```python
+# your_app/views.py
+class BouncesComplaintsListView(View):
+    def get(self, request, *args, **kwargs):
+        return render(request, 'ses_tracking/bounces_complaints/list.html', {
+            'page_title': 'Bounces & Complaints',
+            'api_url': '/webhooks/api/events/',
+        })
+
+# urls.py
+urlpatterns = [
+    path('bounces-complaints/', BouncesComplaintsListView.as_view(), name='bounces-complaints'),
+]
+```
+
+Access at: `https://yourdomain.com/bounces-complaints/`
+
+**Features:**
+- Three tabs: All Events, Bounces Only, Complaints Only
+- View email subject, to address, timestamp
+- Independent date filters per tab
+- Color-coded status indicators
+- Searchable and sortable
+
+### REST API Endpoints
+
+The package provides a full RESTful API:
+
+#### Daily Statistics API
+```bash
+# List all stats (paginated)
+GET /webhooks/api/stats/
+
+# Get specific day
+GET /webhooks/api/stats/{id}/
+
+# Get recent summary
+GET /webhooks/api/stats/summary/?days=7
+
+# Get date range
+GET /webhooks/api/stats/date_range/?start_date=2025-11-01&end_date=2025-11-07
+
+# Get aggregated totals
+GET /webhooks/api/stats/aggregate/?start_date=2025-11-01&end_date=2025-11-07
+
+# Get latest stats
+GET /webhooks/api/stats/latest/
+```
+
+#### Events API (Bounces & Complaints)
+```bash
+# List all bounces and complaints
+GET /webhooks/api/events/
+
+# Filter by event type
+GET /webhooks/api/events/?event_type=bounce
+GET /webhooks/api/events/?event_type=complaint
+
+# Filter by date range
+GET /webhooks/api/events/?start_date=2025-11-01&end_date=2025-11-07
+
+# Search
+GET /webhooks/api/events/?search=user@example.com
 ```
 
 ## Event Types Tracked
@@ -125,20 +258,53 @@ send_html_mail(
 
 ## Admin Interface
 
-Access the admin at `/admin/ses_tracking/sesevent/` to:
+Access the admin at:
+- `/admin/ses_tracking/sesevent/` - Individual email events
+- `/admin/ses_tracking/dailyemailstats/` - Daily aggregated statistics
+
+Features:
 - View all tracked events
 - Filter by event type, bounce type, timestamp
-- Search by email address or message ID
+- Search by email address, subject, message ID
 - View full raw SNS message for debugging
+- Date hierarchy navigation
 
 ## AWS Setup
 
-See `docs/aws-setup.md` for complete AWS CDK setup instructions.
+See `docs/aws-setup.md` for complete AWS CDK setup instructions including:
+- SNS topic creation
+- SES configuration set setup
+- Event destination configuration
+- Webhook subscription
+
+## Management Commands
+
+### aggregate_daily_stats
+
+Aggregate SES events into daily statistics.
+
+**Options:**
+- `--date YYYY-MM-DD`: Specific date to process (defaults to yesterday)
+- `--days N`: Number of days to process backwards (default: 1)
+- `--force`: Force regeneration even if stats exist
+
+**Examples:**
+```bash
+# Daily cron job
+python manage.py aggregate_daily_stats
+
+# Backfill last 30 days
+python manage.py aggregate_daily_stats --days 30
+
+# Regenerate specific date
+python manage.py aggregate_daily_stats --date 2025-11-07 --force
+```
 
 ## Requirements
 
 - Python 3.8+
 - Django 3.2+
+- djangorestframework 3.12+
 - boto3
 - python-dateutil
 - django-mailer
@@ -150,3 +316,14 @@ MIT License - see LICENSE file for details.
 ## Support
 
 For issues, questions, or contributions, please open an issue on GitHub: https://github.com/Canusia/package_ses_tracking/issues
+
+## Changelog
+
+### v1.0.0
+- Initial release
+- AWS SES event tracking
+- Daily statistics aggregation
+- RESTful API with DataTables support
+- Web interface views
+- Django admin integration
+- AWS CDK infrastructure templates
