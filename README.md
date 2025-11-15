@@ -22,7 +22,7 @@ pip install git+https://github.com/Canusia/package_ses_tracking.git@v1.0.0
 ```
 
 Or add to your `requirements.txt`:
-git+https://github.com/Canusia/package_ses_tracking.git@v1.0.0
+git+https://github.com/Canusia/package_ses_tracking.git@v2.0.5
 
 ### Via Git Submodule (Development)
 ```bash
@@ -74,18 +74,64 @@ REST_FRAMEWORK = {
 
 ### 3. Add URL Patterns
 ```python
-# urls.py
+
+# add to myce/urls.py
 from django.urls import path, include
 
-urlpatterns = [
-    # ... other patterns
-    path('webhooks/', include('ses_tracking.urls')),
+urlpatterns += [
+    path('ses/webhooks/', include('ses_tracking.urls')),
 ]
+
+# in settings.py
+INSTALLED_APPS += [
+    'ses_tracking',
+]
+
+STATICFILES_DIRS += [
+    os.path.join(get_package_path("ses_tracking"), 'staticfiles') if get_package_path("ses_tracking") else None
+]
+
+# Tell django-mailer to use your custom backend
+MAILER_EMAIL_BACKEND = 'ses_tracking.backend.SESBackend'
+
+# Add SES configuration
+AWS_SES_REGION = 'us-east-1'
+AWS_SES_CONFIGURATION_SET = '<match>-config-set'
 ```
 
 ### 4. Run Migrations
 ```bash
 python manage.py migrate ses_tracking
+
+# add to cron_jobs.py
+try:
+    call_command(
+        "aggregate_daily_stats",
+        date=datetime.date.today().isoformat(),
+        force=True
+    )
+except Exception as e:
+    logger.error(f"Error aggregating daily stats: {e}")
+
+# add menu to settings
+{
+    "type":"nav-item",
+    "icon":"fas fa-fw fa-envelope",
+        "name":"ses_daily_stats",
+    "label":"Email Stats",
+    "sub_menu":[
+        {
+        "label":"Daily Email Stats",
+        "name":"ses_daily_stats",
+        "url":"ses_tracking:daily-email-stats"
+        },
+        {
+        "label":"Bounces/Complaints",
+        "name":"ses_bounces_complaints",
+        "url":"ses_tracking:bounces-complaints"
+        }
+    ]
+},
 ```
 
 ### 5. Set Up AWS Infrastructure
