@@ -59,6 +59,8 @@ EMAIL_HOST_PASSWORD = 'your-smtp-password'
 # SES Configuration
 AWS_SES_REGION = 'us-east-1'
 AWS_SES_CONFIGURATION_SET = 'your-config-set-name'
+
+OVERRIDE_BOUNCE_RATE = False
 ```
 
 ### 3. Add URL Patterns
@@ -70,6 +72,19 @@ urlpatterns = [
     # ... other patterns
     path('webhooks/', include('ses_tracking.urls')),
 ]
+```
+
+### 3.1 Add to cronjob.py
+```python
+# cronjob.py
+try:
+    call_command(
+        "aggregate_daily_stats",
+        date=datetime.date.today().isoformat(),
+        force=True
+    )
+except Exception as e:
+    logger.error(f"Error aggregating daily stats: {e}")
 ```
 
 ### 4. Run Migrations
