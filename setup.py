@@ -5,19 +5,19 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="django-ses-tracking",
-    version="1.0.3",
+    version="3.0.3",
     author="Canusia",
     author_email="info@canusia.com",
     description="Django app for tracking AWS SES email events (bounces, complaints, deliveries)",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Canusia/package_ses_tracking",
-    packages=['ses_tracking'],
+    packages=['ses_tracking', 'ses_tracking.migrations', 'ses_tracking.management', 'ses_tracking.management.commands'],
     package_dir={'ses_tracking': '.'},
     package_data={
         'ses_tracking': [
-            'migrations/*.py',
-            'migrations/__pycache__/*',
+            'templates/ses_tracking/daily_stats/*.html',
+            'templates/ses_tracking/bounces_complaints/*.html',
         ],
     },
     include_package_data=True,
@@ -43,5 +43,6 @@ setup(
         "boto3>=1.26.0",
         "python-dateutil>=2.8.0",
         "django-mailer>=2.1",
+        "djangorestframework>=3.12.0",
     ],
 )
