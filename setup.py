@@ -18,6 +18,8 @@ setup(
         'ses_tracking': [
             'migrations/*.py',
             'migrations/__pycache__/*',
+            'templates/ses_tracking/daily_stats/*.html',
+            'templates/ses_tracking/bounces_complaints/*.html',
         ],
     },
     include_package_data=True,
