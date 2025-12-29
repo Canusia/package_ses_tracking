@@ -23,10 +23,13 @@ class SESEvent(models.Model):
         ('Undetermined', 'Undetermined'),
     ]
     
+
     event_type = models.CharField(max_length=20, choices=EVENT_TYPES, db_index=True)
     message_id = models.CharField(max_length=255, db_index=True)  # SES message ID
     email_message_id = models.CharField(max_length=500, null=True, blank=True, db_index=True)  # Email Message-ID header
     email = models.EmailField(db_index=True)
+    email_subject = models.CharField(max_length=500, null=True, blank=True, db_index=True)  # Email Subject
+    email_to = models.TextField(null=True, blank=True)  # To addresses (can be multiple, comma-separated)
     
     # Bounce specific
     bounce_type = models.CharField(max_length=20, choices=BOUNCE_TYPES, null=True, blank=True)

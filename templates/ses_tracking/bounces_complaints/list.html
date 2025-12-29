@@ -1,0 +1,491 @@
+{% extends "cis/logged-base.html" %}
+{% block title %}{{page_title}}{% endblock %}
+
+{% block body %}
+<style>
+    .status-bounce {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .status-complaint {
+        color: #ffc107;
+        font-weight: bold;
+    }
+    .badge-permanent {
+        background-color: #dc3545;
+    }
+    .badge-transient {
+        background-color: #ffc107;
+    }
+    .badge-undetermined {
+        background-color: #6c757d;
+    }
+</style>
+
+<main>
+    <div class="">
+        <div class="row">
+            <div class="col-sm-6 col-xs-12">
+                <h1 class="h3 mb-4 text-gray-800">{{page_title}}</h1>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                {% include "cis/messages.html" with messages=messages %}
+
+                <ul class="nav nav-tabs">
+                    <li class="nav-item">
+                        <a data-toggle="tab" class="nav-link active" href="#all">All Events</a>
+                    </li>
+                    <li class="nav-item">
+                        <a data-toggle="tab" class="nav-link" href="#bounces">Bounces Only</a>
+                    </li>
+                    <li class="nav-item">
+                        <a data-toggle="tab" class="nav-link" href="#complaints">Complaints Only</a>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- All Events Tab -->
+                    <div class="tab-pane active show" id="all">
+                        
+                        <div class="bg-white border border-top-0">
+                            <div class="col-12 pt-3 mb-3">
+
+                                <div class="row">                                    
+                                    <div class="col-md-12 mb-3">
+                        <div class="">
+                            <div class="mt-2">
+                                <!-- Date Range Filter -->
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label for="startDate">Start Date:</label>
+                                        <input type="date" id="startDate" class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="endDate">End Date:</label>
+                                        <input type="date" id="endDate" class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label>&nbsp;</label>
+                                        <button id="filterBtn" class="btn btn-primary d-block">Filter</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- DataTable -->
+                                <table id="eventsTable" class="table table-striped table-bordered dt-responsive nowrap" style="width:100%">
+                                    <thead>
+                                        <tr>
+                                            <th>Date/Time</th>
+                                            <th>Email</th>
+                                            <th>Subject</th>
+                                            <th>To Address</th>
+                                            <th>Status</th>
+                                            <th>Type</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Bounces Only Tab -->
+                    <div class="tab-pane" id="bounces">
+                        
+                        <div class="bg-white border border-top-0">
+                            <div class="col-12 pt-3 mb-3">
+
+                                <div class="row">                                    
+                                    <div class="col-md-12 mb-3">
+                        <div class="">
+                            <div class="mt-2">
+                                <!-- Date Range Filter for Bounces -->
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label for="startDateBounces">Start Date:</label>
+                                        <input type="date" id="startDateBounces" class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="endDateBounces">End Date:</label>
+                                        <input type="date" id="endDateBounces" class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label>&nbsp;</label>
+                                        <button id="filterBtnBounces" class="btn btn-primary d-block">Filter</button>
+                                    </div>
+                                </div>
+                                
+                                <table id="bouncesTable" class="table table-striped table-bordered dt-responsive nowrap" style="width:100%">
+                                    <thead>
+                                        <tr>
+                                            <th>Date/Time</th>
+                                            <th>Email</th>
+                                            <th>Subject</th>
+                                            <th>To Address</th>
+                                            <th>Bounce Type</th>
+                                            <th>Sub Type</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Complaints Only Tab -->
+                    <div class="tab-pane" id="complaints">
+                        
+                        <div class="bg-white border border-top-0">
+                            <div class="col-12 pt-3 mb-3">
+
+                                <div class="row">                                    
+                                    <div class="col-md-12 mb-3">
+                        <div class="">
+                            <div class="mt-2">
+                                <!-- Date Range Filter for Complaints -->
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label for="startDateComplaints">Start Date:</label>
+                                        <input type="date" id="startDateComplaints" class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="endDateComplaints">End Date:</label>
+                                        <input type="date" id="endDateComplaints" class="form-control">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label>&nbsp;</label>
+                                        <button id="filterBtnComplaints" class="btn btn-primary d-block">Filter</button>
+                                    </div>
+                                </div>
+                                
+                                <table id="complaintsTable" class="table table-striped table-bordered dt-responsive nowrap" style="width:100%">
+                                    <thead>
+                                        <tr>
+                                            <th>Date/Time</th>
+                                            <th>Email</th>
+                                            <th>Subject</th>
+                                            <th>To Address</th>
+                                            <th>Feedback Type</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+$(document).ready(function() {
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const dateParam = urlParams.get('date');
+    const tabParam = urlParams.get('tab');
+    
+    // If date parameter exists, pre-fill the date filters
+    if (dateParam) {
+        $('#startDate').val(dateParam);
+        $('#endDate').val(dateParam);
+        $('#startDateBounces').val(dateParam);
+        $('#endDateBounces').val(dateParam);
+        $('#startDateComplaints').val(dateParam);
+        $('#endDateComplaints').val(dateParam);
+    }
+    
+    // If tab parameter exists, switch to that tab
+    if (tabParam) {
+        if (tabParam === 'bounces') {
+            $('a[href="#bounces"]').tab('show');
+        } else if (tabParam === 'complaints') {
+            $('a[href="#complaints"]').tab('show');
+        }
+    }
+    
+    // Get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    const csrftoken = getCookie('csrftoken');
+    
+    // Common DataTable configuration
+    function getTableConfig(eventType = null) {
+        return {
+            processing: true,
+            serverSide: true,
+            responsive: true,
+            ajax: {
+                url: '{{api_url}}',
+                type: 'GET',
+                data: function(d) {
+                    var startDate = $('#startDate').val();
+                    var endDate = $('#endDate').val();
+                    
+                    if (startDate) {
+                        d.start_date = startDate;
+                    }
+                    if (endDate) {
+                        d.end_date = endDate;
+                    }
+                    if (eventType) {
+                        d.event_type = eventType;
+                    }
+                    
+                    return d;
+                },
+                dataSrc: 'data',
+                headers: {
+                    'X-CSRFToken': csrftoken
+                }
+            },
+            order: [[0, 'desc']], // Default sort by date descending
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]]
+        };
+    }
+    
+    // Initialize All Events Table
+    var eventsTable = $('#eventsTable').DataTable({
+        ...getTableConfig(),
+        columns: [
+            { 
+                data: 'timestamp',
+                render: function(data) {
+                    return new Date(data).toLocaleString();
+                }
+            },
+            { data: 'email' },
+            { 
+                data: 'email_subject',
+                render: function(data) {
+                    return data || '<em>No subject</em>';
+                }
+            },
+            { 
+                data: 'email_to',
+                render: function(data) {
+                    return data || '<em>N/A</em>';
+                }
+            },
+            { 
+                data: 'event_type_display',
+                render: function(data, type, row) {
+                    var cssClass = row.event_type === 'bounce' ? 'status-bounce' : 'status-complaint';
+                    return '<span class="' + cssClass + '">' + data + '</span>';
+                }
+            },
+            { 
+                data: 'bounce_type',
+                render: function(data, type, row) {
+                    if (row.event_type === 'bounce' && data) {
+                        var badgeClass = 'badge-' + data.toLowerCase();
+                        return '<span class="badge ' + badgeClass + '">' + data + '</span>';
+                    } else if (row.event_type === 'complaint') {
+                        return row.complaint_feedback_type || '<em>N/A</em>';
+                    }
+                    return '<em>N/A</em>';
+                }
+            }
+        ]
+    });
+    
+    // Initialize Bounces Only Table
+    var bouncesTable = $('#bouncesTable').DataTable({
+        processing: true,
+        serverSide: true,
+        responsive: true,
+        ajax: {
+            url: '{{api_url}}',
+            type: 'GET',
+            data: function(d) {
+                var startDate = $('#startDateBounces').val();
+                var endDate = $('#endDateBounces').val();
+                
+                if (startDate) {
+                    d.start_date = startDate;
+                }
+                if (endDate) {
+                    d.end_date = endDate;
+                }
+                d.event_type = 'bounce';
+                
+                return d;
+            },
+            dataSrc: 'data',
+            headers: {
+                'X-CSRFToken': csrftoken
+            }
+        },
+        columns: [
+            { 
+                data: 'timestamp',
+                render: function(data) {
+                    return new Date(data).toLocaleString();
+                }
+            },
+            { data: 'email' },
+            { 
+                data: 'email_subject',
+                render: function(data) {
+                    return data || '<em>No subject</em>';
+                }
+            },
+            { 
+                data: 'email_to',
+                render: function(data) {
+                    return data || '<em>N/A</em>';
+                }
+            },
+            { 
+                data: 'bounce_type',
+                render: function(data) {
+                    if (data) {
+                        var badgeClass = 'badge-' + data.toLowerCase();
+                        return '<span class="badge ' + badgeClass + '">' + data + '</span>';
+                    }
+                    return '<em>N/A</em>';
+                }
+            },
+            { 
+                data: 'bounce_sub_type',
+                render: function(data) {
+                    return data || '<em>N/A</em>';
+                }
+            }
+        ],
+        order: [[0, 'desc']],
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]]
+    });
+    
+    // Initialize Complaints Only Table
+    var complaintsTable = $('#complaintsTable').DataTable({
+        processing: true,
+        serverSide: true,
+        responsive: true,
+        ajax: {
+            url: '{{api_url}}',
+            type: 'GET',
+            data: function(d) {
+                var startDate = $('#startDateComplaints').val();
+                var endDate = $('#endDateComplaints').val();
+                
+                if (startDate) {
+                    d.start_date = startDate;
+                }
+                if (endDate) {
+                    d.end_date = endDate;
+                }
+                d.event_type = 'complaint';
+                
+                return d;
+            },
+            dataSrc: 'data',
+            headers: {
+                'X-CSRFToken': csrftoken
+            }
+        },
+        columns: [
+            { 
+                data: 'timestamp',
+                render: function(data) {
+                    return new Date(data).toLocaleString();
+                }
+            },
+            { data: 'email' },
+            { 
+                data: 'email_subject',
+                render: function(data) {
+                    return data || '<em>No subject</em>';
+                }
+            },
+            { 
+                data: 'email_to',
+                render: function(data) {
+                    return data || '<em>N/A</em>';
+                }
+            },
+            { 
+                data: 'complaint_feedback_type',
+                render: function(data) {
+                    return data || '<em>N/A</em>';
+                }
+            }
+        ],
+        order: [[0, 'desc']],
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]]
+    });
+    
+    // Filter button click handlers
+    $('#filterBtn').on('click', function() {
+        eventsTable.ajax.reload();
+    });
+    
+    $('#filterBtnBounces').on('click', function() {
+        bouncesTable.ajax.reload();
+    });
+    
+    $('#filterBtnComplaints').on('click', function() {
+        complaintsTable.ajax.reload();
+    });
+    
+    // Allow Enter key to trigger filter
+    $('#startDate, #endDate').on('keypress', function(e) {
+        if (e.which === 13) {
+            eventsTable.ajax.reload();
+        }
+    });
+    
+    $('#startDateBounces, #endDateBounces').on('keypress', function(e) {
+        if (e.which === 13) {
+            bouncesTable.ajax.reload();
+        }
+    });
+    
+    $('#startDateComplaints, #endDateComplaints').on('keypress', function(e) {
+        if (e.which === 13) {
+            complaintsTable.ajax.reload();
+        }
+    });
+    
+    // Reload table when tab is shown (for lazy loading)
+    $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function(e) {
+        var target = $(e.target).attr("href");
+        if (target === '#bounces') {
+            bouncesTable.columns.adjust().responsive.recalc();
+        } else if (target === '#complaints') {
+            complaintsTable.columns.adjust().responsive.recalc();
+        }
+    });
+});
+</script>
+{% endblock %}
