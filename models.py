@@ -2,6 +2,8 @@
 from django.db import models
 from django.utils import timezone
 
+from django.conf import settings
+
 
 class SESEvent(models.Model):
     EVENT_TYPES = [
@@ -171,3 +173,29 @@ class DailyEmailStats(models.Model):
             self.bounce_rate = 0
             self.complaint_rate = 0
             self.delivery_rate = 0
+
+    @classmethod
+    def is_bounce_rate_acceptable(cls, threshold=5.0, date=None):
+        """
+        Check if bounce rate is below threshold for given date.
+        
+        Args:
+            threshold: Maximum acceptable bounce rate percentage (default 5.0)
+            date: Date to check (default: today)
+            
+        Returns:
+            tuple: (is_acceptable: bool, current_rate: Decimal, stats: DailyEmailStats or None)
+        """
+        # Check override setting first
+        if getattr(settings, 'OVERRIDE_BOUNCE_RATE', False):
+            return (True, 0, None)
+        
+        if date is None:
+            date = timezone.now().date()
+        
+        try:
+            stats = cls.objects.get(date=date)
+            is_acceptable = stats.bounce_rate <= threshold
+            return (is_acceptable, stats.bounce_rate, stats)
+        except cls.DoesNotExist:
+            return (True, 0, None)  # No data yet, assume acceptable
