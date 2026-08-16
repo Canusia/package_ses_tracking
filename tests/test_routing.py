@@ -97,13 +97,21 @@ class RoutingMapTests(TestCase):
         self.assertEqual(mapping, {})
 
     def test_shared_secondary_takes_the_first_match(self):
-        _user('a@college.edu', secondary='shared@home.com',
-              groups=['instructor'], username='a')
+        # Both users share the same secondary_email, but each has a
+        # different alt_email, so which one is "first" is distinguishable
+        # in the result: if the code picked the second user (or an
+        # arbitrary one) the assertion below would fail.
+        first = _user('a@college.edu', secondary='shared@home.com',
+                       alt='a@alt.com', groups=['instructor'], username='a')
         _user('b@college.edu', secondary='shared@home.com',
-              groups=['instructor'], username='b')
+              alt='b@alt.com', groups=['instructor'], username='b')
         mapping = routing.build_routing_map(
-            ['shared@home.com'], _config({'instructor': ['secondary']}))
-        self.assertEqual(mapping, {'shared@home.com': ['shared@home.com']})
+            ['shared@home.com'],
+            _config({'instructor': ['secondary', 'alt']}))
+        self.assertEqual(
+            mapping,
+            {'shared@home.com': ['shared@home.com', first.alt_email]},
+        )
 
     def test_empty_role_map_routes_nothing(self):
         _user('teach@college.edu', secondary='teach@home.com',
@@ -120,6 +128,14 @@ class RoutingMapTests(TestCase):
         with self.assertNumQueries(2):  # users + prefetched groups
             routing.build_routing_map(
                 ['a@college.edu', 'b@college.edu'], config)
+
+        # Add a third user/address and confirm the count does not grow --
+        # the property under test is "constant in N", not "equals 2".
+        _user('c@college.edu', secondary='c@home.com',
+              groups=['instructor'], username='c')
+        with self.assertNumQueries(2):
+            routing.build_routing_map(
+                ['a@college.edu', 'b@college.edu', 'c@college.edu'], config)
 
 
 class RecipientListTests(TestCase):
@@ -153,6 +169,15 @@ class RecipientListTests(TestCase):
         self.assertEqual(
             routing.route_recipient_list(['stranger@example.com'], {}),
             ['stranger@example.com'],
+        )
+
+    def test_unmatched_addresses_pass_through_unvalidated(self):
+        # Deliberately malformed and NOT in the routing map: this branch
+        # must never validate or drop addresses we were not asked to
+        # touch -- validation applies only to substituted-in targets.
+        self.assertEqual(
+            routing.route_recipient_list(['not-an-email'], {}),
+            ['not-an-email'],
         )
 
 

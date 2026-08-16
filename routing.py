@@ -29,7 +29,6 @@ installable in a deployment that does not have cis.
 """
 import logging
 
-from django.conf import settings as dj_settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -138,6 +137,11 @@ def build_routing_map(addresses, config):
             | Q(_alt__in=wanted)
         )
         .prefetch_related('groups')
+        # First-match-wins on the non-unique secondary/alt columns is this
+        # module's guarantee, not the user model's -- order explicitly
+        # instead of relying on whatever Meta.ordering (or its absence, on a
+        # cis-less deployment) happens to produce.
+        .order_by('pk')
     )
 
     resolved = {}
