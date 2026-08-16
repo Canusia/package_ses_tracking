@@ -12,7 +12,9 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Canusia/package_ses_tracking",
-    packages=['ses_tracking', 'ses_tracking.migrations', 'ses_tracking.management', 'ses_tracking.management.commands'],
+    packages=['ses_tracking', 'ses_tracking.migrations', 'ses_tracking.management',
+              'ses_tracking.management.commands', 'ses_tracking.settings',
+              'ses_tracking.tests'],
     package_dir={'ses_tracking': '.'},
     package_data={
         'ses_tracking': [
