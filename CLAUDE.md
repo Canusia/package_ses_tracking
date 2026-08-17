@@ -37,6 +37,57 @@ MAILER_EMAIL_BACKEND = 'ses_tracking.backend.SESBackend'
 
 Automatically adds `X-SES-CONFIGURATION-SET` header to all outgoing emails.
 
+## Role-Based Email Routing (`routing.py`)
+
+A `RoutingBackend` / `RoutingSESBackend` pair (also in `backend.py`) rewrites
+recipients per role at delivery time, before delegating to the inner
+backend. In this deployment:
+```python
+EMAIL_BACKEND = 'ses_tracking.backend.RoutingBackend'
+MAILER_EMAIL_BACKEND = 'ses_tracking.backend.RoutingSESBackend'
+```
+
+Do not collapse these two settings to the same value, and do not point
+`MAILER_EMAIL_BACKEND` at the plain `RoutingBackend` -- only
+`RoutingSESBackend` guarantees its inner backend is `SESBackend`.
+`RoutingBackend` alone would fall through to a generic SMTP inner backend and
+silently drop the `X-SES-CONFIGURATION-SET` header, zeroing out bounce and
+complaint tracking with no error anywhere.
+
+### Configuration
+
+Governed by the `Email Routing by Role` setting (CE Admin > Settings),
+stored under the setting key `ses_tracking.settings.email_routing` as:
+```python
+{'mode': 'active' | 'inactive', 'roles': {'<role-slug>': ['primary', 'secondary', 'alt'], ...}}
+```
+`mode` is the kill switch; `roles` maps each MyCE role slug to the list of
+address kinds (`primary` = `email`, `secondary` = `secondary_email`, `alt` =
+`alt_email`) mail addressed to that role's users should be delivered to.
+
+**Ships inactive.** `install()` seeds every role at `['primary']` but leaves
+`mode: 'inactive'` -- seeding `'active'` would not be inert, because the
+resolution below covers every address a matched user owns, not just the one
+a message was addressed to. A CE admin must deliberately switch it on.
+
+### Resolution semantics (`ses_tracking/routing.py`)
+
+1. **Drop-if-not-selected** -- an address kind not selected for a role is not
+   delivered to; that is the only way to stop mail reaching an unread
+   mailbox. An empty selection for a role means "not configured," not
+   "suppress" -- routing leaves that role's mail at the original address
+   (today's behavior), it does not drop it.
+2. **Union across roles** -- a user's delivery set is the union of the kinds
+   selected for every group they belong to.
+3. **Primary preferred, then first match** -- `email` is unique, but
+   `secondary_email`/`alt_email` are not, so an incoming address can match
+   several users (e.g. a shared high-school office mailbox). The user whose
+   *primary* address matches wins over any user who only matches via
+   secondary/alt; ties within either class break by ascending `pk`.
+4. **Fallback to original** -- if the selected kinds resolve to no valid
+   address for a matched user, that user's mail is left untouched instead of
+   being dropped.
+
 ## Commands
 
 ```bash

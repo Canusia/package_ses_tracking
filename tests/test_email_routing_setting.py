@@ -41,10 +41,15 @@ class EmailRoutingSettingTests(TestCase):
         self.assertEqual(
             list(form.fields['role_instructor'].choices), routing.KIND_CHOICES)
 
-    def test_install_seeds_every_role_to_primary(self):
+    def test_install_seeds_every_role_to_primary_but_stays_inactive(self):
         self._form_class()(_request()).install()
         stored = self._form_class().from_db()
-        self.assertEqual(stored['mode'], 'active')
+        # Must ship OFF: build_routing_map rewrites every address a matched
+        # user owns, not just the incoming one, so seeding 'active' would
+        # silently move mail addressed to a user's secondary_email/
+        # alt_email onto their primary on day one. See
+        # RoutingHazardRegressionTests below for the mechanism this guards.
+        self.assertEqual(stored['mode'], 'inactive')
         self.assertEqual(
             stored['roles'],
             {'instructor': ['primary'], 'student': ['primary']},
@@ -89,7 +94,11 @@ class EmailRoutingSettingTests(TestCase):
                        'student': ['primary', 'alt']}},
         )
 
-    def test_a_role_may_be_set_to_no_addresses(self):
+    def test_a_role_with_no_boxes_checked_stores_an_empty_list(self):
+        # Storing [] here does not mean "suppress this role's mail" -- see
+        # the help_text on the field and routing.py's module docstring: an
+        # empty kinds set is "no configuration", and routing.py leaves the
+        # address untouched (today's behavior).
         form = self._form_class()(
             _request(),
             data={'mode': 'active', 'role_instructor': [],

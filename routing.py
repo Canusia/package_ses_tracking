@@ -137,14 +137,21 @@ def build_routing_map(addresses, config):
             | Q(_alt__in=wanted)
         )
         .prefetch_related('groups')
-        # First-match-wins on the non-unique secondary/alt columns is this
-        # module's guarantee, not the user model's -- order explicitly
-        # instead of relying on whatever Meta.ordering (or its absence, on a
-        # cis-less deployment) happens to produce.
+        # Deterministic within each precedence class (see below); order
+        # explicitly instead of relying on whatever Meta.ordering (or its
+        # absence, on a cis-less deployment) happens to produce.
         .order_by('pk')
     )
 
-    resolved = {}
+    # An address can be one user's primary and another user's
+    # secondary/alt -- a shared mailbox is the realistic case. Resolving by
+    # raw pk order there would let whichever user has the lower pk hijack
+    # mail addressed to the other user's primary. So primary-owners take
+    # precedence over secondary/alt-owners; pk order is only the tie-break
+    # within each of those two classes. Single query, still -- precedence is
+    # resolved in Python over the rows already fetched.
+    resolved_primary = {}
+    resolved_other = {}
     for user in users:
         kinds = _configured_kinds(user, role_map)
         if not kinds:
@@ -155,14 +162,17 @@ def build_routing_map(addresses, config):
             # Fallback: leave this user's mail where it was going.
             continue
 
+        primary = (getattr(user, 'email', '') or '').strip().lower()
         for field in KIND_FIELDS.values():
             owned = (getattr(user, field, '') or '').strip().lower()
-            # `not in resolved` is the first-match-wins rule for the
-            # non-unique secondary/alt columns.
-            if owned and owned in wanted and owned not in resolved:
-                resolved[owned] = targets
+            if not owned or owned not in wanted:
+                continue
+            bucket = resolved_primary if owned == primary else resolved_other
+            # First-match-wins within a precedence class.
+            if owned not in bucket:
+                bucket[owned] = targets
 
-    return resolved
+    return {**resolved_other, **resolved_primary}
 
 
 def route_recipient_list(addresses, routing_map):

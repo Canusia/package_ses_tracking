@@ -63,6 +63,36 @@ AWS_SES_CONFIGURATION_SET = 'your-config-set-name'
 OVERRIDE_BOUNCE_RATE = False
 ```
 
+### 2.1 (Optional) Role-Based Email Routing
+
+To rewrite recipients per role at delivery time -- e.g. sending mail to a
+user's `secondary_email` instead of their `email` for certain roles -- wire
+the routing backends instead of `SESBackend` directly:
+```python
+EMAIL_BACKEND = 'ses_tracking.backend.RoutingBackend'
+MAILER_EMAIL_BACKEND = 'ses_tracking.backend.RoutingSESBackend'
+```
+Use `RoutingSESBackend`, not the plain `RoutingBackend`, for
+`MAILER_EMAIL_BACKEND`: only `RoutingSESBackend` guarantees `SESBackend` as
+its inner backend. Using the plain `RoutingBackend` there would silently
+drop the `X-SES-CONFIGURATION-SET` header and zero out bounce/complaint
+tracking.
+
+Routing is governed by the `Email Routing by Role` setting, stored as:
+```python
+{'mode': 'active' | 'inactive', 'roles': {'<role-slug>': ['primary', 'secondary', 'alt'], ...}}
+```
+It **ships inactive** -- `install()` seeds every role's kinds but leaves
+`mode` off, since seeding `'active'` would not be a no-op (it would rewrite
+every address a matched user owns, not just the incoming one). A CE admin
+must deliberately switch it on. Resolution semantics: an unselected kind is
+dropped from delivery (but an *entirely empty* selection for a role means
+"not configured" and leaves that role's mail unchanged, not suppressed); a
+user's kinds are the union across all their roles; when several users share
+a non-primary address, the user whose *primary* matches wins, else the
+lowest-`pk` match; and if nothing valid resolves, the original address is
+left alone. See `ses_tracking/routing.py` and `CLAUDE.md` for details.
+
 ### 3. Add URL Patterns
 ```python
 # urls.py

@@ -143,9 +143,16 @@ class RoutingBackend(BaseEmailBackend):
                 rewrites.append(f'{field}={routed} (was {list(current)})')
 
             if rewrites:
-                # django-mailer logs the recipient recorded at *enqueue* time,
-                # which is the pre-routing address -- stale by the time we get
-                # here. This is the record of where mail actually went.
+                # This is the record of where mail actually went -- do not
+                # assume django-mailer's stored recipient always is stale.
+                # When this backend runs as MAILER_EMAIL_BACKEND (mail was
+                # already enqueued by 'mailer.backend.DbBackend' under
+                # EMAIL_BACKEND), the row in mailer's queue was written
+                # *before* this rewrite, so it is pre-routing. But when
+                # EMAIL_BACKEND itself resolves to this backend and its inner
+                # backend is 'mailer.backend.DbBackend', the rewrite above
+                # happens before DbBackend enqueues, so the recipient it
+                # stores is already post-routing.
                 logger.info(
                     'email routing: %s | %s',
                     message.subject, '; '.join(rewrites)

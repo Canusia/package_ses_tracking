@@ -113,6 +113,38 @@ class RoutingMapTests(TestCase):
             {'shared@home.com': ['shared@home.com', first.alt_email]},
         )
 
+    def test_seeded_default_config_moves_secondary_mail_to_primary(self):
+        # Pins the hazard behind Finding 1: this is the exact shape
+        # install() used to seed by default (mode=active, every role at
+        # ['primary']). If mail is addressed to a user's secondary_email
+        # while every role only routes to primary, it gets rewritten to
+        # their primary -- moving mail on day one with no CE action and no
+        # log of a config change. This is why install() must ship
+        # mode='inactive'; it does not mean routing.py itself is buggy.
+        _user('wabell@cvsd.org', secondary='wabell@ewu.edu',
+              groups=['instructor'])
+        mapping = routing.build_routing_map(
+            ['wabell@ewu.edu'],
+            _config({'instructor': ['primary']}, mode='active'))
+        self.assertEqual(mapping, {'wabell@ewu.edu': ['wabell@cvsd.org']})
+
+    def test_primary_owner_wins_over_lower_pk_secondary_owner(self):
+        # office@hs.edu is user A's secondary_email and user B's primary --
+        # a shared high-school office mailbox is the realistic case. A has
+        # the lower pk, so raw pk order would resolve office@hs.edu to A's
+        # targets, delivering B's mail to A. Primary ownership must win
+        # regardless of pk order.
+        a = _user('a@college.edu', secondary='office@hs.edu',
+                   alt='a@alt.com', groups=['instructor'], username='a')
+        b = _user('office@hs.edu', secondary='b@home.com',
+                   alt='b@alt.com', groups=['instructor'], username='b')
+        self.assertLess(a.pk, b.pk)
+        mapping = routing.build_routing_map(
+            ['office@hs.edu'],
+            _config({'instructor': ['secondary', 'alt']}))
+        self.assertEqual(
+            mapping, {'office@hs.edu': ['b@home.com', 'b@alt.com']})
+
     def test_empty_role_map_routes_nothing(self):
         _user('teach@college.edu', secondary='teach@home.com',
               groups=['instructor'])

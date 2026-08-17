@@ -69,8 +69,17 @@ class email_routing(SettingForm):
             self.fields[name] = forms.MultipleChoiceField(
                 choices=KIND_CHOICES,
                 widget=forms.CheckboxSelectMultiple,
-                required=False,   # empty == send this role nothing
+                # Not "empty == send this role nothing": routing.py treats an
+                # empty kinds set as no configuration for that role and
+                # leaves mail untouched (today's behavior), which is the
+                # safe direction. See the help_text below and
+                # routing.py's module docstring.
+                required=False,
                 label=meta.get('nice_name') or slug,
+                help_text=(
+                    'Clearing every box leaves this role\'s mail unchanged '
+                    '-- it does NOT suppress delivery.'
+                ),
             )
             self.initial.setdefault(
                 name, stored_roles.get(slug, [KIND_PRIMARY]))
@@ -114,9 +123,16 @@ class email_routing(SettingForm):
             setting.key = self.key
 
         setting.value = {
-            'mode': 'active',
-            # Every role to primary: installing changes nothing until a role
-            # is deliberately pointed somewhere else.
+            # Ships switched off deliberately: seeding 'active' is NOT inert.
+            # build_routing_map rewrites every address a matched user owns,
+            # not just the incoming one, so 'active' with every role at
+            # ['primary'] would move mail addressed to a user's
+            # secondary_email/alt_email onto their primary on day one, with
+            # no CE action and nothing in the logs to say a config changed.
+            'mode': 'inactive',
+            # Every role to primary: once a CE admin switches mode to
+            # 'active', nothing moves until a role is deliberately pointed
+            # somewhere else.
             'roles': {slug: [KIND_PRIMARY] for slug in _roles()},
         }
         setting.save()
