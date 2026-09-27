@@ -167,6 +167,19 @@ send_html_mail(
 |---------|-------------|---------|
 | `AWS_SES_REGION` | AWS region for SES | `us-east-1` |
 | `AWS_SES_CONFIGURATION_SET` | SES configuration set name | `default-config-set` |
+| `SES_TRACKING_ALLOWED_TOPIC_ARNS` | SNS topic ARNs the webhook accepts. Recommended; when unset, any correctly signed topic is accepted and a warning is logged. | unset |
+
+## Security
+
+- **The webhook only trusts genuine SNS messages.** Every message's signature
+  is verified against the SNS signing certificate, which is only fetched from
+  `https://sns.<region>.amazonaws.com`. `SignatureVersion` 1 (SHA1) and 2
+  (SHA256) are supported. Unsigned or tampered messages get `403` and store
+  nothing. Subscriptions are auto-confirmed only for a signed message whose
+  `SubscribeURL` is on `https://sns.<region>.amazonaws.com`.
+- **The API (`api/events/`, `api/stats/` and its actions) and both pages are CE
+  staff only** (`cis.utils.CIS_user_only` / `user_has_cis_role`). They expose
+  recipient addresses, subjects and tenant-wide email metrics.
 
 ## Admin Interface
 
@@ -187,6 +200,7 @@ See `docs/aws-setup.md` for complete AWS CDK setup instructions.
 - boto3
 - python-dateutil
 - django-mailer
+- cryptography (SNS signature verification)
 
 ## License
 

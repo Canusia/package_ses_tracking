@@ -3,7 +3,7 @@
 import json
 import logging
 from django.utils import timezone
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .models import SESEvent
@@ -18,6 +18,9 @@ from django.db.models import Sum, Avg, Q
 from datetime import datetime, timedelta
 from .models import DailyEmailStats, SESEvent
 from .serializers import DailyEmailStatsSerializer, DailyEmailStatsSummarySerializer, SESEventSerializer
+from .sns_verify import SNSVerificationError, is_sns_url, verify as verify_sns_message
+
+from cis.utils import CIS_user_only
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,8 @@ class SESEventViewSet(viewsets.ReadOnlyModelViewSet):
     ).select_related().order_by('-timestamp')
     serializer_class = SESEventSerializer
     pagination_class = DataTablesPagination
+    # bounce/complaint recipients and subjects: CE staff only (#2)
+    permission_classes = [CIS_user_only]
     
     def get_queryset(self):
         """
@@ -158,6 +163,8 @@ class DailyEmailStatsViewSet(viewsets.ReadOnlyModelViewSet):
     - date_range: Get stats for a date range
     - aggregate: Get aggregated totals for a period
     """
+    permission_classes = [CIS_user_only]  # tenant-wide email metrics: CE staff only (#2)
+
     queryset = DailyEmailStats.objects.all()
     serializer_class = DailyEmailStatsSerializer
     pagination_class = DataTablesPagination
@@ -406,19 +413,30 @@ def sns_endpoint(request):
     Endpoint to receive SNS notifications from AWS SES
     """
     try:
-        # Parse the JSON body
         message_data = json.loads(request.body.decode('utf-8'))
-        
+    except (ValueError, UnicodeDecodeError):
+        return HttpResponseBadRequest('Invalid JSON')
+
+    try:
+        # Nothing is trusted until it is proven to be a genuine SNS message (#2):
+        # otherwise anyone could forge SES events or make us fetch arbitrary URLs.
+        try:
+            verify_sns_message(message_data)
+        except SNSVerificationError as exc:
+            logger.warning('Rejected SNS message: %s', exc)
+            return HttpResponseForbidden('Invalid SNS message')
+
         # Handle SNS subscription confirmation
         if message_data.get('Type') == 'SubscriptionConfirmation':
             subscribe_url = message_data.get('SubscribeURL')
+            # the signature covers SubscribeURL, but only ever call back to SNS itself
+            if not is_sns_url(subscribe_url):
+                logger.warning('Rejected SNS SubscribeURL %r', subscribe_url)
+                return HttpResponseForbidden('Invalid SubscribeURL')
             logger.info(f"SNS Subscription confirmation received. URL: {subscribe_url}")
-            
-            # Automatically confirm the subscription
-            import urllib.request
-            urllib.request.urlopen(subscribe_url).read()
+            _confirm_subscription(subscribe_url)
             logger.info("SNS Subscription confirmed successfully")
-            
+
             return HttpResponse('Subscription confirmed', status=200)
         
         # Handle SNS notifications
@@ -457,6 +475,13 @@ def sns_endpoint(request):
         logger.error(f"Error processing SNS notification: {str(e)}", exc_info=True)
         return HttpResponse('Error processing notification', status=500)
 sns_endpoint.login_required = False
+
+
+def _confirm_subscription(subscribe_url):
+    """GET an already-verified sns.*.amazonaws.com SubscribeURL."""
+    import urllib.request
+    with urllib.request.urlopen(subscribe_url, timeout=10) as resp:  # noqa: S310 -- checked by is_sns_url
+        resp.read()
 
 def handle_bounce(message):
     """Process bounce notifications"""
@@ -637,10 +662,18 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views import View
 from django.views.decorators.clickjacking import xframe_options_exempt
 
+from django.contrib.auth.decorators import user_passes_test
+from django.utils.decorators import method_decorator
+
 from cis.menu import draw_menu, cis_menu
+from cis.utils import user_has_cis_role
 from django.urls import reverse
 
 
+_ce_only = method_decorator(user_passes_test(user_has_cis_role, login_url='/'), name='dispatch')
+
+
+@_ce_only
 class BouncesComplaintsListView(View):
     """
     View for displaying bounces and complaints
@@ -653,6 +686,7 @@ class BouncesComplaintsListView(View):
             'api_url': '/ses/webhooks/api/events/',
         })
 
+@_ce_only
 class DailyEmailStatsListView(View):
 
     def get(self, request, *args, **kwargs):

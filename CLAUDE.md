@@ -27,6 +27,20 @@ Tracks AWS SES email events via SNS webhooks. Stores delivery, bounce, complaint
 /ses/webhooks/sns/ses-events/  # SNS webhook endpoint
 ```
 
+## Security (#2)
+
+- `sns_endpoint` is public (csrf-exempt, `login_required = False`), so it trusts
+  nothing until `sns_verify.verify()` passes: signature checked against the SNS
+  signing cert (fetched only from `https://sns.<region>.amazonaws.com`, cached
+  per process), SignatureVersion 1/2, optional `SES_TRACKING_ALLOWED_TOPIC_ARNS`
+  allow-list (unset = any signed topic, with a warning). Failures are 403 and
+  store nothing; `SubscribeURL` is followed only if it is also on sns.*.amazonaws.com.
+- `SESEventViewSet` / `DailyEmailStatsViewSet` use `CIS_user_only`; the two page
+  views are wrapped in `user_passes_test(user_has_cis_role)`. Never rely on the
+  tenant's DRF default (it is only `IsAuthenticated`).
+- Version lives in BOTH `setup.py` (`version=`, which wins) and `setup.cfg`;
+  bump both to the tag being cut.
+
 ## Email Backend (`backend.py`)
 
 Custom SMTP backend that injects SES configuration set header:
