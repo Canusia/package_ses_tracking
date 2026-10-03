@@ -45,7 +45,11 @@ class SESEvent(models.Model):
     timestamp = models.DateTimeField(db_index=True)
     raw_message = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
+    # Campus the mail was sent for (#3), from the event's configuration set
+    # via SES_CAMPUS_CONFIG. Blank on single-campus deployments.
+    campus_code = models.CharField(max_length=50, blank=True, default='', db_index=True)
+
     class Meta:
         ordering = ['-timestamp']
         verbose_name = 'SES Event'
@@ -53,6 +57,19 @@ class SESEvent(models.Model):
     
     def __str__(self):
         return f"{self.event_type.title()} - {self.email} - {self.timestamp}"
+
+    @staticmethod
+    def campus_from_raw_message(raw_message):
+        """SES puts the configuration set in mail.tags['ses:configuration-set']."""
+        from .campus_mail import campus_for_configuration_set
+        try:
+            tag = ((raw_message or {}).get('mail') or {}).get('tags', {}).get(
+                'ses:configuration-set')
+        except AttributeError:
+            return ''
+        if isinstance(tag, list):
+            tag = tag[0] if tag else None
+        return campus_for_configuration_set(tag)
     
     @property
     def extract_email_subject(self):
@@ -113,6 +130,8 @@ class SESEvent(models.Model):
             self.email_subject = self.extract_email_subject
         if not self.email_to and self.raw_message:
             self.email_to = self.extract_email_to
+        if not self.campus_code and self.raw_message:
+            self.campus_code = self.campus_from_raw_message(self.raw_message)
         super().save(*args, **kwargs)
 
 

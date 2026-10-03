@@ -10,6 +10,7 @@ from email.utils import getaddresses
 from django.core.mail import get_connection
 from django.core.mail.backends.base import BaseEmailBackend
 
+from . import campus_mail
 from .routing import (
     build_routing_map,
     load_config,
@@ -26,17 +27,23 @@ class SESBackend(SMTPBackend):
     def __init__(self, fail_silently=False, **kwargs):
         super().__init__(fail_silently=fail_silently, **kwargs)
         
-        # Get SES settings from Django settings
+        # Get SES settings from Django settings. No implicit fallback: an unset
+        # AWS_SES_CONFIGURATION_SET sends without the header (#3). The old
+        # 'rmu-config-set' default tagged other tenants' mail into RMU's set.
         self.aws_region = getattr(settings, 'AWS_SES_REGION', 'us-east-1')
-        self.configuration_set = getattr(settings, 'AWS_SES_CONFIGURATION_SET', 'rmu-config-set')
-    
+        self.configuration_set = campus_mail.default_configuration_set()
+
     def _send(self, email_message):
-        # Add configuration set header
-        if not hasattr(email_message, 'extra_headers'):
-            email_message.extra_headers = {}
-        
-        email_message.extra_headers['X-SES-CONFIGURATION-SET'] = self.configuration_set
-        
+        # Per-campus sender + configuration set; strips X-MyCE-Campus (#3).
+        cfg = campus_mail.resolve(email_message)
+        configuration_set = cfg.get('configuration_set') or self.configuration_set
+
+        headers = email_message.extra_headers
+        if configuration_set:
+            headers[campus_mail.CONFIG_SET_HEADER] = configuration_set
+        else:
+            headers.pop(campus_mail.CONFIG_SET_HEADER, None)
+
         # Call the original _send method of the parent SMTP backend
         return super()._send(email_message)
 
@@ -97,7 +104,25 @@ class RoutingBackend(BaseEmailBackend):
                 'Email routing failed; delivering messages unrouted'
             )
 
+        self.apply_campus(email_messages or [])
         return self.connection.send_messages(email_messages)
+
+    def apply_campus(self, email_messages):
+        """Stamp the creating campus (#3) while the campus context is live.
+
+        SESBackend and the mailer queue resolve the stamp later. Any other
+        inner backend (plain SMTP, locmem) gets the sender resolved now, and the
+        internal header stripped, so it never reaches a payload.
+        """
+        resolves_later = isinstance(self.connection, SESBackend) or \
+            type(self.connection).__module__.startswith('mailer')
+        for message in email_messages:
+            try:
+                campus_mail.stamp(message)
+                if not resolves_later:
+                    campus_mail.resolve(message)
+            except Exception:
+                logger.exception('Could not apply the campus to an outgoing message')
 
     def route(self, email_messages):
         """Rewrite recipients in place across the whole batch.

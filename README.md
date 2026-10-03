@@ -166,8 +166,35 @@ send_html_mail(
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `AWS_SES_REGION` | AWS region for SES | `us-east-1` |
-| `AWS_SES_CONFIGURATION_SET` | SES configuration set name | `default-config-set` |
+| `AWS_SES_CONFIGURATION_SET` | SES configuration set name. **No implicit fallback (since v4.4.0):** when unset or `None`, mail is sent without the `X-SES-CONFIGURATION-SET` header and is not tracked. | unset |
+| `SES_CAMPUS_CONFIG` | Multi-campus only: `{'<campus code>': {'from_email': ..., 'configuration_set': ...}}`. See *Per-campus sender* below. | unset |
 | `SES_TRACKING_ALLOWED_TOPIC_ARNS` | SNS topic ARNs the webhook accepts. Recommended; when unset, any correctly signed topic is accepted and a warning is logged. | unset |
+
+## Per-campus sender and configuration set (multi-campus)
+
+```python
+SES_CAMPUS_CONFIG = {
+    'LAMAR_A': {'from_email': 'noreply@lit.edu', 'configuration_set': 'lamar-lit'},
+    'LAMAR_B': {'from_email': 'noreply@lamarpa.edu', 'configuration_set': 'lamar-lscpa'},
+}
+```
+
+- **Stamped at creation, resolved at delivery.** Mail created inside a campus context (a
+  request on that campus's host, or a `run_for_each_campus` job) gets an internal
+  `X-MyCE-Campus` header. Direct sends are stamped by `RoutingBackend`. Queued sends are
+  stamped by a `pre_save` on `mailer.models.Message` (`send_mail` / `send_html_mail`).
+  `SESBackend` resolves the stamp at flush time and strips it before SMTP.
+- **Sender:** replaced with the campus `from_email` only when it is `DEFAULT_FROM_EMAIL`
+  (compared by address; any display name is kept). Explicit senders are kept. Every
+  `from_email` must be a verified SES identity.
+- **Configuration set:** the campus's set, else `AWS_SES_CONFIGURATION_SET`, else no header.
+- **Events:** `SESEvent.campus_code` is filled from the event's configuration set, and the
+  events API accepts `?campus=<code>`.
+- Unset or empty `SES_CAMPUS_CONFIG` means nothing is stamped and no campus is looked up, so
+  single-campus tenants are unchanged.
+- Limit: django-mailer's own `DbBackend` enqueues with `bulk_create` (no signals). Mail that
+  reaches it through `RoutingBackend` is already stamped; a deployment wiring `DbBackend`
+  directly as `EMAIL_BACKEND` gets queue stamping only for `send_mail` / `send_html_mail`.
 
 ## Security
 

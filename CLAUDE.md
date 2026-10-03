@@ -49,7 +49,18 @@ EMAIL_BACKEND = 'mailer.backend.DbBackend'  # django-mailer
 MAILER_EMAIL_BACKEND = 'ses_tracking.backend.SESBackend'
 ```
 
-Automatically adds `X-SES-CONFIGURATION-SET` header to all outgoing emails.
+Adds the `X-SES-CONFIGURATION-SET` header to outgoing email when a set is configured.
+There is **no fallback** (#3): the old `'rmu-config-set'` default tagged other tenants' mail
+into RMU's set. Unset means no header.
+
+**Per-campus (#3, `campus_mail.py`):** `SES_CAMPUS_CONFIG` maps a campus code to a
+`from_email` / `configuration_set`. Mail is stamped with `X-MyCE-Campus` at creation, by
+`RoutingBackend.apply_campus` and by the `mailer.Message` `pre_save` connected in
+`apps.ready()`. `SESBackend._send` resolves it (`campus_mail.resolve`), and the header is
+always stripped before SMTP. The default sender is swapped only when it equals
+`DEFAULT_FROM_EMAIL`. Everything is a no-op when `SES_CAMPUS_CONFIG` is empty: keep it
+that way, since about 50 single-campus tenants must not pay a campus lookup per send.
+`SESEvent.campus_code` is filled in `save()` from `mail.tags['ses:configuration-set']`.
 
 ## Role-Based Email Routing (`routing.py`)
 

@@ -10,6 +10,19 @@ class SesTrackingConfig(AppConfig):
     # imports each entry as `<app>.settings.<name>.<name>`. The explicit 'app'
     # key is required: it is stored on SettingRecord and used to build that
     # import path, so it must match this app's dotted path exactly.
+    def ready(self):
+        # Stamp queued mail with its campus at enqueue time (#3). django-mailer
+        # is optional for this package.
+        try:
+            from django.db.models.signals import pre_save
+            from mailer.models import Message
+        except Exception:
+            return
+        from .campus_mail import stamp_queued_message
+        pre_save.connect(
+            stamp_queued_message, sender=Message,
+            dispatch_uid='ses_tracking_stamp_queued_message')
+
     CONFIGURATORS = [
         {
             'app': 'ses_tracking',

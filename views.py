@@ -103,6 +103,11 @@ class SESEventViewSet(viewsets.ReadOnlyModelViewSet):
         event_type = self.request.query_params.get('event_type')
         if event_type:
             queryset = queryset.filter(event_type=event_type)
+
+        # Filter by campus (#3; multi-campus deployments)
+        campus = self.request.query_params.get('campus')
+        if campus:
+            queryset = queryset.filter(campus_code=campus)
         
         # Custom date range filtering
         start_date = self.request.query_params.get('start_date')
