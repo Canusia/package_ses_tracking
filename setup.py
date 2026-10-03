@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="django-ses-tracking",
-    version="4.3.0",  # keep in step with setup.cfg and the git tag
+    version="4.4.0",  # keep in step with setup.cfg and the git tag
     author="Canusia",
     author_email="info@canusia.com",
     description="Django app for tracking AWS SES email events (bounces, complaints, deliveries)",
