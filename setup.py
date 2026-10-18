@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="django-ses-tracking",
-    version="4.4.0",  # keep in step with setup.cfg and the git tag
+    version="4.5.0",  # keep in step with setup.cfg and the git tag
     author="Canusia",
     author_email="info@canusia.com",
     description="Django app for tracking AWS SES email events (bounces, complaints, deliveries)",
@@ -20,6 +20,8 @@ setup(
         'ses_tracking': [
             'templates/ses_tracking/daily_stats/*.html',
             'templates/ses_tracking/bounces_complaints/*.html',
+            # Self-rooted layout: templates ship only when listed here.
+            'templates/ses_tracking/sent_email/*.html',
         ],
     },
     include_package_data=True,

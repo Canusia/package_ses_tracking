@@ -21,6 +21,7 @@ Tracks AWS SES email events via SNS webhooks. Stores delivery, bounce, complaint
 - `rendering_failure` - Template error
 - `delivery_delay` - Temporary delay
 - `subscription` - Unsubscribe action
+- `open` - Opened (SES open tracking; needs Open on the configuration set)
 
 ## URL Structure
 ```
@@ -158,3 +159,59 @@ OVERRIDE_BOUNCE_RATE = False  # Set True to disable bounce rate validation
 - Works with `django-mailer` for async email queue
 - Stores raw SNS messages for debugging
 - `DailyEmailStats.is_bounce_rate_acceptable()` for health checks
+
+## Sent Email log (v4.5.0)
+
+Every message that leaves through `RoutingBackend` / `RoutingSESBackend` is recorded as a
+`SentEmail` (`capture.py`), after role routing and debug routing and just before the inner
+send. The row's UUID goes to SES as the message tag `myce-id` (`X-SES-MESSAGE-TAGS`, merged
+with any existing tags), and SES copies tags onto every event, so `events.link()` joins each
+`SESEvent` to its row: delivery / bounce / complaint / reject / delay move `status` forward
+only, and `open` events set `first_opened_at` and `open_count`. Recording never costs a
+message: a capture error is logged and the mail goes out untagged.
+
+- **Permission:** `ses_tracking.view_sent_email` ("Can view sent email"), denied by default;
+  superusers pass. Page, tab and API all require a CIS role **and** the permission
+  (`permissions.can_view_sent_email`). The CE menu item (under Email Stats, seeded by
+  migration 0008) is visible to all CE staff -- `draw_menu` has no permission hook -- and
+  shows a 403 page naming the permission to users without it.
+- **Page:** `/ses/webhooks/sent-email/` (`ses_tracking:sent-email`). **API:**
+  `/ses/webhooks/api/sent-email/` -- the list serializer never includes bodies; filters
+  `address`, `person` (exact addresses, comma-separated), `status`, `opened` (yes/no/na),
+  `path`, `campus`, `start_date`, `end_date`. HTML bodies render only in a sandboxed
+  `srcdoc` iframe.
+- **Emails tab:** registered from `apps.ready()` (`tabs.py`) on the student, teacher and
+  hs_administrator registries in the tenant's `myce/component_registry`, when present.
+- **Opens are approximate** and need an HTML part (`SentEmail.trackable`).
+- **Retention:** setting `sent_email` (`body_retention_days` 180, `log_retention_days` 730);
+  `manage.py prune_sent_email [--dry-run]`, scheduled daily through the cis `CronTab`
+  (seeded by migration 0007).
+- **Direct sends** (`path='direct'`) get no SES events until they go through django-mailer
+  (package-cis#101).
+
+### AWS setup for opens
+
+In SES, on the tenant's configuration set, edit the existing SNS event destination and add
+**Open** to its event types. Leave **Click** off: it rewrites every link (password-reset and
+parent-consent links included) through an AWS redirect. Nothing else changes -- same topic,
+same webhook.
+
+## Staging debug routing (v4.5.0)
+
+`debug_routing.py`. Switched **only** by `settings.SES_TRACKING_DEBUG_ROUTING`, which a tenant
+sets from the environment:
+
+```python
+SES_TRACKING_DEBUG_ROUTING = os.getenv('EMAIL_DEBUG_ROUTING') == 'True'
+```
+
+with `EMAIL_DEBUG_ROUTING=True` only in its staging and pull-request manifests. Never switch
+it from the database: databases are copied between production and staging.
+
+While on, every to/cc/bcc recipient is replaced: a user goes to the debug lists of their
+roles (union), anyone else -- non-users, roles without a list -- to the "everyone else" list.
+Lists are fields on the **Email Routing by Role** setting (`debug_lists`,
+`debug_everyone_else`). **Fails closed:** an empty result drops that recipient (WARNING log);
+a message left with nobody is not sent; an unsaved setting drops all mail. Redirected mail
+gets the subject prefix `[STAGING → <first original address>]` and `X-MyCE-Original-To`, and
+`SentEmail.debug_routed=True`. Set the lists on staging **before** deploying with the switch on.
