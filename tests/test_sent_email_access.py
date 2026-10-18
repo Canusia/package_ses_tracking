@@ -132,3 +132,21 @@ class MenuSeedTests(TestCase):
         add_sent_email(Setting)
         menu = json.loads(Setting.objects.get(key='cis.settings.menu').value['ce_menu'])
         self.assertEqual([s['name'] for s in menu[0]['sub_menu']], ['ses_sent_email'])
+
+
+class TableTemplateEscapingTests(TestCase):
+    """Values from the API go into HTML attributes (title, data-id), so the
+    escaper must encode quotes, and nothing is wired through inline onclick."""
+
+    def _js(self):
+        from django.template.loader import render_to_string
+        return render_to_string('ses_tracking/sent_email/_table.html',
+                                {'table_id': 't', 'api_url': '/x/'})
+
+    def test_escaper_encodes_quotes(self):
+        js = self._js()
+        self.assertIn("&quot;", js)
+        self.assertIn("&#39;", js)
+
+    def test_no_inline_onclick_built_from_data(self):
+        self.assertNotIn('onclick=', self._js())

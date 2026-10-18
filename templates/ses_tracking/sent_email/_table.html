@@ -43,8 +43,11 @@ Every value from the API is inserted as text (escape()), never as HTML.
 </table>
 <script>
 jQuery(function ($) {
+    // Encodes quotes too: values land in attributes (title, data-id).
     function escape(value) {
-        return $('<div>').text(value == null ? '' : String(value)).html();
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
     var BADGE = {sent: 'secondary', delivered: 'success', delayed: 'warning',
                  bounced: 'danger', complained: 'danger', rejected: 'danger'};
@@ -80,10 +83,11 @@ jQuery(function ($) {
                 return d ? escape(new Date(d).toLocaleString()) + (row.open_count > 1 ? ' (' + escape(row.open_count) + '×)' : '') : '–';
             }},
             {orderable: false, searchable: false, render: function (d) {
-                return '<button type="button" class="btn btn-sm btn-primary" onclick="showSentEmail(\'' + escape(d) + '\')">View</button>';
+                return '<button type="button" class="btn btn-sm btn-primary sent-email-view" data-id="' + escape(d) + '">View</button>';
             }}
         ]
     });
     $('.{{ table_id|escapejs }}-filter').on('change', function () { table.ajax.reload(); });
+    $(tableId).on('click', '.sent-email-view', function () { showSentEmail($(this).data('id')); });
 });
 </script>

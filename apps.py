@@ -11,6 +11,10 @@ class SesTrackingConfig(AppConfig):
     # key is required: it is stored on SettingRecord and used to build that
     # import path, so it must match this app's dotted path exactly.
     def ready(self):
+        # Emails tab on the person detail pages that have a tab registry.
+        from . import tabs
+        tabs.register()
+
         # Stamp queued mail with its campus at enqueue time (#3). django-mailer
         # is optional for this package.
         try:

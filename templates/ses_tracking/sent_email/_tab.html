@@ -1,0 +1,10 @@
+<div class="card border-top-0">
+    <div class="card-body">
+        <p class="text-muted small">
+            Mail sent to this person's email, secondary and alternate addresses.
+            "Opened" is approximate; plain-text mail can't be tracked.
+        </p>
+        {% include "ses_tracking/sent_email/_table.html" with table_id=table_id api_url=api_url show_filters=False %}
+        {% include "ses_tracking/sent_email/_detail_modal.html" %}
+    </div>
+</div>
