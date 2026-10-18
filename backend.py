@@ -105,15 +105,35 @@ class RoutingBackend(BaseEmailBackend):
         messages = list(email_messages or [])
         # Before any rewrite, so the log keeps who the mail was addressed to.
         originals = capture.snapshot(messages)
+        # One settings read per batch, shared by role and debug routing.
+        config = load_config() if messages else {}
         try:
-            self.route(messages)
+            self.route(messages, config)
         except Exception:
             logger.exception(
                 'Email routing failed; delivering messages unrouted'
             )
 
+        from . import debug_routing
+        debug_flags = [False] * len(messages)
+        try:
+            debug_flags = debug_routing.apply(messages, config)
+        except Exception:
+            if debug_routing.is_on():
+                # Fail closed: never let a crash send staging mail to real people.
+                logger.exception('Debug routing failed; dropping the batch')
+                return 0
+            logger.exception('Debug routing failed')
+
+        # Debug routing can leave a message with nobody to send to.
+        keep = [i for i, message in enumerate(messages) if message.recipients()]
+        if not keep:
+            return 0
+        messages = [messages[i] for i in keep]
+
         self.apply_campus(messages)
-        rows = capture.record(messages, originals, self.capture_path)
+        rows = capture.record(messages, [originals[i] for i in keep], self.capture_path,
+                              [debug_flags[i] for i in keep])
         try:
             sent = self.connection.send_messages(messages)
         except Exception as exc:
@@ -139,7 +159,7 @@ class RoutingBackend(BaseEmailBackend):
             except Exception:
                 logger.exception('Could not apply the campus to an outgoing message')
 
-    def route(self, email_messages):
+    def route(self, email_messages, config=None):
         """Rewrite recipients in place across the whole batch.
 
         Config and the routing map are resolved once per batch, not per
@@ -149,7 +169,8 @@ class RoutingBackend(BaseEmailBackend):
         if not email_messages:
             return
 
-        config = load_config()
+        if config is None:
+            config = load_config()
         if not routing_is_active(config):
             return
 

@@ -91,7 +91,10 @@ class EmailRoutingSettingTests(TestCase):
             form._to_python(),
             {'mode': 'active',
              'roles': {'instructor': ['secondary'],
-                       'student': ['primary', 'alt']}},
+                       'student': ['primary', 'alt']},
+             # Staging debug lists (sent-email work): empty when not posted.
+             'debug_lists': {},
+             'debug_everyone_else': []},
         )
 
     def test_a_role_with_no_boxes_checked_stores_an_empty_list(self):
