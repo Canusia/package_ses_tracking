@@ -96,16 +96,31 @@ class RoutingBackend(BaseEmailBackend):
     def close(self):
         return self.connection.close()
 
+    #: Recorded on SentEmail.path; RoutingSESBackend overrides it.
+    capture_path = 'direct'
+
     def send_messages(self, email_messages):
+        from . import capture
+
+        messages = list(email_messages or [])
+        # Before any rewrite, so the log keeps who the mail was addressed to.
+        originals = capture.snapshot(messages)
         try:
-            self.route(email_messages)
+            self.route(messages)
         except Exception:
             logger.exception(
                 'Email routing failed; delivering messages unrouted'
             )
 
-        self.apply_campus(email_messages or [])
-        return self.connection.send_messages(email_messages)
+        self.apply_campus(messages)
+        rows = capture.record(messages, originals, self.capture_path)
+        try:
+            sent = self.connection.send_messages(messages)
+        except Exception as exc:
+            capture.mark(rows, exc)
+            raise
+        capture.mark(rows)
+        return sent
 
     def apply_campus(self, email_messages):
         """Stamp the creating campus (#3) while the campus context is live.
@@ -192,6 +207,8 @@ class RoutingSESBackend(RoutingBackend):
     inner backend and silently drop the ``X-SES-CONFIGURATION-SET`` header,
     which is what bounce and complaint tracking depends on.
     """
+
+    capture_path = 'queue'
 
     def inner_backend_path(self):
         return SES_BACKEND_PATH
