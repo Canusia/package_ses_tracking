@@ -8,9 +8,13 @@ from ses_tracking.tests.test_sent_email_access import API, _client, _rows, _user
 class PersonFilterTests(TestCase):
 
     def setUp(self):
-        SentEmail.objects.create(path='queue', subject='mine', search_addresses='a@x.com b@y.com')
-        SentEmail.objects.create(path='queue', subject='lookalike', search_addresses='aa@x.com')
-        SentEmail.objects.create(path='queue', subject='blank', search_addresses='')
+        from ses_tracking.models import SentEmailRecipient
+        for subject, addresses in (('mine', ['a@x.com', 'b@y.com']),
+                                   ('lookalike', ['aa@x.com']), ('blank', [])):
+            row = SentEmail.objects.create(path='queue', subject=subject,
+                                           search_addresses=' '.join(addresses))
+            SentEmailRecipient.objects.bulk_create(
+                [SentEmailRecipient(sent_email=row, address=a) for a in addresses])
         self.c = _client(_user('tab', perm=True))
 
     def subjects(self, person):

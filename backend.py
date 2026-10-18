@@ -90,6 +90,10 @@ class RoutingBackend(BaseEmailBackend):
             settings, 'SES_TRACKING_ROUTING_INNER_BACKEND', FALLBACK_BACKEND
         )
 
+    def enqueues(self):
+        """True when the inner backend only puts mail on django-mailer's queue."""
+        return type(self.connection).__module__.startswith('mailer')
+
     def open(self):
         return self.connection.open()
 
@@ -103,6 +107,11 @@ class RoutingBackend(BaseEmailBackend):
         from . import capture
 
         messages = list(email_messages or [])
+        # Each message gets its own headers dict before anything is stamped:
+        # EmailMessage keeps the caller's dict as-is, and a batch built with
+        # one shared dict would otherwise carry every message's tag.
+        for message in messages:
+            message.extra_headers = dict(message.extra_headers or {})
         # Before any rewrite, so the log keeps who the mail was addressed to.
         originals = capture.snapshot(messages)
         # One settings read per batch, shared by role and debug routing.
@@ -113,6 +122,13 @@ class RoutingBackend(BaseEmailBackend):
             logger.exception(
                 'Email routing failed; delivering messages unrouted'
             )
+
+        if self.enqueues():
+            # The inner backend only queues for django-mailer; the flush runs
+            # through MAILER_EMAIL_BACKEND, which debug-routes and records
+            # the message then. Doing it here too would double both.
+            self.apply_campus(messages)
+            return self.connection.send_messages(messages)
 
         from . import debug_routing
         debug_flags = [False] * len(messages)

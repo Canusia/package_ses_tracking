@@ -259,8 +259,10 @@ class SentEmail(models.Model):
     delivered_cc = models.JSONField(default=list)
     delivered_bcc = models.JSONField(default=list)
     # Lower-cased, space-joined union of every original and delivered
-    # address: what search and the person tab match against.
-    search_addresses = models.TextField(blank=True, default='', db_index=True)
+    # address, for staff free-text search. Not btree-indexed: a big send
+    # would exceed the index row size, and contains-search can't use it.
+    # Exact per-person lookups go through SentEmailRecipient instead.
+    search_addresses = models.TextField(blank=True, default='')
     from_email = models.CharField(max_length=320, blank=True, default='')
     subject = models.CharField(max_length=998, blank=True, default='', db_index=True)
     text_body = models.TextField(null=True, blank=True)
@@ -301,3 +303,13 @@ class SentEmail(models.Model):
             self.first_opened_at = when
             fields.append('first_opened_at')
         self.save(update_fields=fields)
+
+
+class SentEmailRecipient(models.Model):
+    """One lower-cased address (original or delivered) of a SentEmail, so the
+    person Emails tab is an indexed exact lookup, not a table scan."""
+    sent_email = models.ForeignKey(SentEmail, on_delete=models.CASCADE, related_name='recipients')
+    address = models.CharField(max_length=320, db_index=True)
+
+    class Meta:
+        unique_together = [('sent_email', 'address')]

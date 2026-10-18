@@ -8,18 +8,34 @@ Every function here swallows its own errors: losing a log row is acceptable,
 losing a message is not.
 """
 import logging
+import re
 from email.utils import getaddresses
 
+from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from . import campus_mail
-from .models import SentEmail
+from .models import SentEmail, SentEmailRecipient
 
 logger = logging.getLogger(__name__)
 
 TAG_HEADER = 'X-SES-MESSAGE-TAGS'
 TAG_NAME = 'myce-id'
 FIELDS = ('to', 'cc', 'bcc')
+
+# A sender sets this header to keep a message's bodies out of the log
+# (one-time codes and the like). Internal: stripped before sending.
+NO_BODY_HEADER = 'X-MyCE-No-Body-Log'
+
+# Live credentials never go into the stored copy: anyone with
+# view_sent_email can read it. Django's password-reset links
+# (password_reset/<uidb64>/<token>/) are redacted by default; a tenant can
+# add patterns with SES_TRACKING_BODY_REDACT_PATTERNS.
+DEFAULT_REDACT_PATTERNS = (
+    r'(password_reset|reset)/[A-Za-z0-9_\-]+/[A-Za-z0-9]{1,13}-[A-Za-z0-9]{20,}/?',
+)
+REDACTED = '[link removed]'
 
 
 def snapshot(messages):
@@ -31,13 +47,32 @@ def _bare(addresses):
     return [address for _, address in getaddresses(list(addresses or [])) if address]
 
 
+def _redact(body):
+    if not body:
+        return body
+    patterns = tuple(DEFAULT_REDACT_PATTERNS) + tuple(
+        getattr(settings, 'SES_TRACKING_BODY_REDACT_PATTERNS', ()) or ())
+    for pattern in patterns:
+        body = re.sub(pattern, REDACTED, body)
+    return body
+
+
 def _bodies(message):
     if getattr(message, 'content_subtype', '') == 'html':
-        return None, message.body
-    text = message.body if isinstance(message.body, str) else None
-    html = next((content for content, mimetype in getattr(message, 'alternatives', None) or []
-                 if mimetype == 'text/html'), None)
-    return text, html
+        text, html = None, message.body
+    else:
+        text = message.body if isinstance(message.body, str) else None
+        html = next((content for content, mimetype in getattr(message, 'alternatives', None) or []
+                     if mimetype == 'text/html'), None)
+    return _redact(text), _redact(html)
+
+
+def _header(message, name):
+    """Case-insensitive lookup of an extra header: (actual key, value)."""
+    for key, value in message.extra_headers.items():
+        if key.lower() == name.lower():
+            return key, value
+    return None, None
 
 
 def _campus_code(message):
@@ -51,10 +86,14 @@ def _campus_code(message):
 
 
 def _tag(message, row):
-    headers = message.extra_headers
-    existing = headers.get(TAG_HEADER, '')
-    tag = f'{TAG_NAME}={row.id.hex}'
-    headers[TAG_HEADER] = f'{existing}, {tag}' if existing else tag
+    """Set this row's myce-id tag, keeping other tags and replacing any
+    myce-id left from an earlier send of the same message object."""
+    key, existing = _header(message, TAG_HEADER)
+    if key:
+        del message.extra_headers[key]
+    others = [pair.strip() for pair in (existing or '').split(',')
+              if pair.strip() and not pair.strip().startswith(f'{TAG_NAME}=')]
+    message.extra_headers[TAG_HEADER] = ', '.join(others + [f'{TAG_NAME}={row.id.hex}'])
 
 
 def record(messages, originals, path, debug_flags=None):
@@ -67,22 +106,38 @@ def record(messages, originals, path, debug_flags=None):
             everyone = {address.lower()
                         for group in (*delivered.values(), *original.values())
                         for address in group}
-            text, html = _bodies(message)
-            row = SentEmail.objects.create(
-                original_to=original['to'], original_cc=original['cc'],
-                original_bcc=original['bcc'],
-                delivered_to=delivered['to'], delivered_cc=delivered['cc'],
-                delivered_bcc=delivered['bcc'],
-                search_addresses=' '.join(sorted(everyone)),
-                from_email=message.from_email or '',
-                subject=(message.subject or '')[:998],
-                text_body=text, html_body=html,
-                path=path,
-                campus_code=_campus_code(message),
-                debug_routed=bool(debug_flags and debug_flags[index]),
-                sent_at=timezone.now(),
-                trackable=html is not None,
-            )
+            key, _ = _header(message, NO_BODY_HEADER)
+            if key:
+                del message.extra_headers[key]
+                text, html = None, None
+                trackable = any(m == 'text/html' for _, m in getattr(message, 'alternatives', None) or []) \
+                    or getattr(message, 'content_subtype', '') == 'html'
+            else:
+                text, html = _bodies(message)
+                trackable = html is not None
+            # A savepoint: a database error here must not abort the caller's
+            # transaction (django-mailer sends inside atomic(); an aborted
+            # transaction would re-queue mail that already went out).
+            with transaction.atomic():
+                row = SentEmail.objects.create(
+                    original_to=original['to'], original_cc=original['cc'],
+                    original_bcc=original['bcc'],
+                    delivered_to=delivered['to'], delivered_cc=delivered['cc'],
+                    delivered_bcc=delivered['bcc'],
+                    search_addresses=' '.join(sorted(everyone)),
+                    from_email=(message.from_email or '')[:320],
+                    subject=(message.subject or '')[:998],
+                    text_body=text, html_body=html,
+                    path=path,
+                    campus_code=_campus_code(message),
+                    debug_routed=bool(debug_flags and debug_flags[index]),
+                    sent_at=timezone.now(),
+                    trackable=trackable,
+                )
+                SentEmailRecipient.objects.bulk_create(
+                    [SentEmailRecipient(sent_email=row, address=address[:320])
+                     for address in sorted(everyone)],
+                    ignore_conflicts=True)
             _tag(message, row)
             rows.append(row)
         except Exception:
@@ -97,8 +152,9 @@ def mark(rows, error=None):
     if not ids:
         return
     try:
-        SentEmail.objects.filter(pk__in=ids).update(
-            smtp_status=SentEmail.SMTP_FAILED if error else SentEmail.SMTP_SENT,
-            smtp_error=str(error) if error else '')
+        with transaction.atomic():
+            SentEmail.objects.filter(pk__in=ids).update(
+                smtp_status=SentEmail.SMTP_FAILED if error else SentEmail.SMTP_SENT,
+                smtp_error=str(error) if error else '')
     except Exception:
         logger.exception('Could not record the SMTP result')

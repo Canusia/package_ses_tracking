@@ -65,7 +65,8 @@ jQuery(function ($) {
             }
         },
         columns: [
-            {render: function (d) { return d ? escape(new Date(d).toLocaleString()) : ''; }},
+            // Dates and status aren't free-text searchable: icontains on them scans every row.
+            {searchable: false, render: function (d) { return d ? escape(new Date(d).toLocaleString()) : ''; }},
             {orderable: false, render: function (d, t, row) {
                 var to = (d || []).join(', ');
                 var was = (row.original_to || []).join(', ');
@@ -73,12 +74,12 @@ jQuery(function ($) {
                 return '<span' + title + '>' + escape(to) + (row.debug_routed ? ' <span class="badge badge-warning">debug</span>' : '') + '</span>';
             }},
             {render: function (d) { return escape(d) || '<em>No subject</em>'; }},
-            {render: function (d, t, row) {
+            {searchable: false, render: function (d, t, row) {
                 var label = row.smtp_status === 'failed' ? 'failed' : d;
                 var badge = row.smtp_status === 'failed' ? 'danger' : (BADGE[d] || 'secondary');
                 return '<span class="badge badge-' + badge + '">' + escape(label) + '</span>';
             }},
-            {render: function (d, t, row) {
+            {searchable: false, render: function (d, t, row) {
                 if (!(row.trackable === true || row.trackable === 'True')) { return '<span class="text-muted">n/a</span>'; }
                 return d ? escape(new Date(d).toLocaleString()) + (row.open_count > 1 ? ' (' + escape(row.open_count) + '×)' : '') : '–';
             }},

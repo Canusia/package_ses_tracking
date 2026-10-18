@@ -138,3 +138,101 @@ class QueuedPathTests(TestCase):
             RoutingSESBackend().send_messages(
                 [EmailMessage('S', 'b', 'f@x.com', ['a@x.com'])])
         self.assertEqual(SentEmail.objects.get().path, SentEmail.PATH_QUEUE)
+
+
+# --- Final-review fixes ------------------------------------------------------
+
+@override_settings(EMAIL_BACKEND=ROUTING, SES_TRACKING_ROUTING_INNER_BACKEND=LOCMEM)
+class CaptureRobustnessTests(TestCase):
+
+    def setUp(self):
+        mail.outbox = []
+        p = patch('ses_tracking.backend.load_config', return_value={})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_db_error_while_recording_leaves_the_callers_transaction_usable(self):
+        # django-mailer sends each queued message inside transaction.atomic():
+        # an aborted transaction there re-queues mail that was already sent.
+        from django.db import connection, transaction
+
+        def db_error(**kwargs):
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT 1/0')
+
+        with patch('ses_tracking.capture.SentEmail.objects.create', side_effect=db_error):
+            with transaction.atomic():
+                EmailMessage('S', 'b', 'f@x.com', ['a@x.com']).send()
+                self.assertEqual(SentEmail.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_hundreds_of_recipients_are_recorded(self):
+        to = [f'person{i:04d}-with-a-long-name@some-school-district.example.org' for i in range(300)]
+        EmailMessage('Blast', 'b', 'f@x.com', to).send()
+        self.assertEqual(len(SentEmail.objects.get().delivered_to), 300)
+
+    def test_overlong_from_is_truncated_not_fatal(self):
+        EmailMessage('S', 'b', 'N' * 400 + ' <f@x.com>', ['a@x.com']).send()
+        self.assertLessEqual(len(SentEmail.objects.get().from_email), 320)
+
+    def test_messages_sharing_one_headers_dict_each_get_only_their_own_tag(self):
+        shared = {'X-Campaign': 'fall'}
+        get_connection().send_messages([
+            EmailMessage(f'M{i}', 'b', 'f@x.com', [f'p{i}@x.com'], headers=shared)
+            for i in range(3)])
+        rows = {r.subject: r for r in SentEmail.objects.all()}
+        for message in mail.outbox:
+            header = message.extra_headers[TAG_HEADER]
+            self.assertEqual(header.count('myce-id='), 1, header)
+            self.assertIn(rows[message.subject].id.hex, header)
+        self.assertEqual(shared, {'X-Campaign': 'fall'})
+
+    def test_resending_a_message_replaces_its_tag(self):
+        message = EmailMessage('S', 'b', 'f@x.com', ['a@x.com'])
+        get_connection().send_messages([message])
+        get_connection().send_messages([message])
+        latest = SentEmail.objects.order_by('-sent_at').first()
+        self.assertEqual(message.extra_headers[TAG_HEADER], f'myce-id={latest.id.hex}')
+
+    def test_password_reset_links_are_redacted_from_stored_bodies(self):
+        m = EmailMultiAlternatives(
+            'Reset', 'Go to https://ewu.example.com/password_reset/MTIz/cabc12-0123456789abcdef0123456789abcdef/ now',
+            'f@x.com', ['a@x.com'])
+        m.attach_alternative('<a href="https://ewu.example.com/password_reset/MTIz/cabc12-0123456789abcdef0123456789abcdef/">x</a>',
+                             'text/html')
+        m.send()
+        row = SentEmail.objects.get()
+        self.assertNotIn('cabc12-0123456789abcdef0123456789abcdef', row.text_body)
+        self.assertNotIn('cabc12-0123456789abcdef0123456789abcdef', row.html_body)
+        self.assertIn('[link removed]', row.text_body)
+        # The person still gets the real link.
+        self.assertIn('cabc12-0123456789abcdef0123456789abcdef', mail.outbox[0].body)
+
+    def test_no_body_log_header_skips_bodies_and_never_leaves(self):
+        EmailMessage('Code', 'Your code is 123456', 'f@x.com', ['a@x.com'],
+                     headers={'X-MyCE-No-Body-Log': '1'}).send()
+        row = SentEmail.objects.get()
+        self.assertIsNone(row.text_body)
+        self.assertNotIn('X-MyCE-No-Body-Log', mail.outbox[0].extra_headers)
+
+    def test_recipients_are_indexed_one_row_per_address(self):
+        EmailMessage('S', 'b', 'f@x.com', ['A@x.com'], cc=['c@x.com']).send()
+        row = SentEmail.objects.get()
+        self.assertCountEqual(row.recipients.values_list('address', flat=True),
+                              ['a@x.com', 'c@x.com'])
+
+
+class MailerInnerBackendTests(TestCase):
+    """A tenant whose RoutingBackend enqueues into django-mailer must not be
+    recorded or debug-routed twice: the queue flush does both."""
+
+    @override_settings(EMAIL_BACKEND=ROUTING, SES_TRACKING_ROUTING_INNER_BACKEND='mailer.backend.DbBackend',
+                       SES_TRACKING_DEBUG_ROUTING=True)
+    def test_enqueue_step_neither_records_nor_debug_routes(self):
+        from mailer.models import Message
+        with patch('ses_tracking.backend.load_config', return_value={'debug_everyone_else': ['qa@x.com']}):
+            EmailMessage('Hello', 'b', 'f@x.com', ['a@x.com']).send()
+        self.assertFalse(SentEmail.objects.exists())
+        queued = Message.objects.get().email
+        self.assertEqual(queued.to, ['a@x.com'])
+        self.assertEqual(queued.subject, 'Hello')

@@ -150,3 +150,12 @@ class TableTemplateEscapingTests(TestCase):
 
     def test_no_inline_onclick_built_from_data(self):
         self.assertNotIn('onclick=', self._js())
+
+
+class TableSearchScopeTests(TestCase):
+
+    def test_only_address_and_subject_columns_are_searchable(self):
+        from django.template.loader import render_to_string
+        js = render_to_string('ses_tracking/sent_email/_table.html', {'table_id': 't', 'api_url': '/x/'})
+        # sent_at, status, first_opened_at and the button; To and Subject stay searchable.
+        self.assertEqual(js.count('searchable: false'), 4)

@@ -1,7 +1,6 @@
 """Sent Email API, for the CE page and the person Emails tab."""
 import datetime
 
-from django.db.models import Q
 from rest_framework import viewsets
 
 from .models import SentEmail
@@ -10,19 +9,12 @@ from .serializers import SentEmailDetailSerializer, SentEmailTableSerializer
 
 
 def _person_filter(qs, value):
-    """Rows sent to any of the comma-separated addresses, matched as whole
-    tokens of the space-joined search_addresses, so a@x.com never matches
-    aa@x.com, and a blank list matches nothing."""
+    """Rows sent to any of the comma-separated addresses: an exact, indexed
+    lookup on SentEmailRecipient. A blank list matches nothing."""
     wanted = [a.strip().lower() for a in value.split(',') if a.strip()]
     if not wanted:
         return qs.none()
-    match = Q()
-    for address in wanted:
-        match |= (Q(search_addresses=address)
-                  | Q(search_addresses__startswith=f'{address} ')
-                  | Q(search_addresses__endswith=f' {address}')
-                  | Q(search_addresses__contains=f' {address} '))
-    return qs.filter(match)
+    return qs.filter(recipients__address__in=wanted).distinct()
 
 
 class SentEmailViewSet(viewsets.ReadOnlyModelViewSet):

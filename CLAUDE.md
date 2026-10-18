@@ -183,6 +183,17 @@ message: a capture error is logged and the mail goes out untagged.
 - **Emails tab:** registered from `apps.ready()` (`tabs.py`) on the student, teacher and
   hs_administrator registries in the tenant's `myce/component_registry`, when present.
 - **Opens are approximate** and need an HTML part (`SentEmail.trackable`).
+- **Stored bodies never hold live credentials.** Anyone with `view_sent_email` can read
+  them, so Django password-reset links (`password_reset/<uidb64>/<token>/`) are replaced
+  with `[link removed]` in the stored copy (the recipient still gets the real link). Add
+  patterns with `SES_TRACKING_BODY_REDACT_PATTERNS`. A sender can keep a message's bodies
+  out of the log entirely with the header `X-MyCE-No-Body-Log: 1` (stripped before
+  sending) -- use it for one-time codes.
+- **Recording never touches the caller's transaction:** each row is written in a savepoint
+  (django-mailer sends inside `atomic()`; an aborted transaction there would re-queue mail
+  already sent). Per-person lookups use `SentEmailRecipient` (indexed exact address).
+- If a tenant's `SES_TRACKING_ROUTING_INNER_BACKEND` is django-mailer's `DbBackend`, the
+  enqueue step neither records nor debug-routes; the queue flush does both once.
 - **Retention:** setting `sent_email` (`body_retention_days` 180, `log_retention_days` 730);
   `manage.py prune_sent_email [--dry-run]`, scheduled daily through the cis `CronTab`
   (seeded by migration 0007).
