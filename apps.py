@@ -31,4 +31,11 @@ class SesTrackingConfig(AppConfig):
             'description': 'Which address(es) each role receives mail at',
             'categories': ['4'],
         },
+        {
+            'app': 'ses_tracking',
+            'name': 'sent_email',
+            'title': 'Sent Email',
+            'description': 'How long sent mail and message bodies are kept',
+            'categories': ['4'],
+        },
     ]
