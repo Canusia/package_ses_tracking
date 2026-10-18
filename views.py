@@ -741,3 +741,33 @@ class DailyEmailStatsListView(View):
             'page_title': 'Daily Email Stats',
             'api_url': reverse('ses_tracking:daily-stats-list'),  # Best practice
         })
+
+def open_tracking_health():
+    """True when trackable mail went out in the last 7 days but no opens came back."""
+    from .models import SentEmail
+    since = timezone.now() - timedelta(days=7)
+    return (SentEmail.objects.filter(sent_at__gte=since, trackable=True).exists()
+            and not SESEvent.objects.filter(event_type='open', timestamp__gte=since).exists())
+
+
+@_ce_only
+class SentEmailListView(View):
+    """Sent Email: every message MyCE sent, with delivery status and opens."""
+
+    def get(self, request, *args, **kwargs):
+        from . import debug_routing
+        from .permissions import can_view_sent_email
+        from .settings.sent_email import retention
+
+        if not can_view_sent_email(request.user):
+            return render(request, 'ses_tracking/sent_email/no_access.html', status=403)
+        menu = draw_menu(cis_menu, 'ses_daily_stats', 'ses_sent_email')
+        return render(request, 'ses_tracking/sent_email/list.html', {
+            'menu': menu,
+            'page_title': 'Sent Email',
+            'api_url': reverse('ses_tracking:sent-email-list'),
+            'detail_url_template': reverse('ses_tracking:sent-email-detail', args=['ID']),
+            'body_retention_days': retention()[0],
+            'debug_routing_on': debug_routing.is_on(),
+            'open_tracking_quiet': open_tracking_health(),
+        })

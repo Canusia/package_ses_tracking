@@ -1,0 +1,69 @@
+{% comment %}
+Detail modal for a sent message. The HTML body is shown only inside a
+sandboxed iframe (no scripts, no same-origin), filled through srcdoc from JS;
+every other value is set with .text().
+Context: detail_url_template (contains the literal ID), body_retention_days.
+{% endcomment %}
+<div class="modal fade" id="sentEmailModal" tabindex="-1" role="dialog" aria-labelledby="sentEmailModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sentEmailModalTitle">Sent email</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-sm">
+                    <tr><th>Subject</th><td data-f="subject"></td></tr>
+                    <tr><th>From</th><td data-f="from_email"></td></tr>
+                    <tr><th>Delivered to</th><td data-f="delivered"></td></tr>
+                    <tr><th>Addressed to</th><td data-f="original"></td></tr>
+                    <tr><th>Sent</th><td data-f="sent_at"></td></tr>
+                </table>
+                <h6>Timeline</h6>
+                <ul class="list-unstyled small" data-f="timeline"></ul>
+                <h6>Message</h6>
+                <div data-f="pruned" class="alert alert-secondary d-none">
+                    Message body no longer stored (kept {{ body_retention_days }} days).
+                </div>
+                <iframe data-f="html" sandbox="" referrerpolicy="no-referrer" title="Message body"
+                        class="d-none" style="width:100%;height:60vh;border:1px solid #ddd"></iframe>
+                <pre data-f="text" class="d-none" style="white-space:pre-wrap"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+if (!window.showSentEmail) {
+    window.showSentEmail = function (id) {
+        var $m = jQuery('#sentEmailModal');
+        var url = '{{ detail_url_template|escapejs }}'.replace('ID', encodeURIComponent(id));
+        jQuery.getJSON(url, {format: 'json'}, function (e) {
+            function f(name) { return $m.find('[data-f="' + name + '"]'); }
+            function when(v) { return v ? new Date(v).toLocaleString() : ''; }
+            f('subject').text(e.subject || '');
+            f('from_email').text(e.from_email || '');
+            f('delivered').text([].concat(e.delivered_to, e.delivered_cc, e.delivered_bcc).filter(Boolean).join(', '));
+            f('original').text([].concat(e.original_to, e.original_cc, e.original_bcc).filter(Boolean).join(', '));
+            f('sent_at').text(when(e.sent_at));
+            var $t = f('timeline').empty();
+            $t.append(jQuery('<li>').text(when(e.sent_at) + ' — ' + (e.smtp_status === 'failed'
+                ? 'Sending failed: ' + (e.smtp_error || '') : 'Sent')));
+            (e.events || []).slice().sort(function (a, b) { return a.timestamp < b.timestamp ? -1 : 1; })
+                .forEach(function (ev) {
+                    var detail = ev.bounce_type ? ' (' + ev.bounce_type + (ev.bounce_sub_type ? ' / ' + ev.bounce_sub_type : '') + ')'
+                        : ev.reject_reason ? ' (' + ev.reject_reason + ')' : '';
+                    $t.append(jQuery('<li>').text(when(ev.timestamp) + ' — ' + ev.event_type + ' ' + (ev.email || '') + detail));
+                });
+            if (e.path === 'direct' && !(e.events || []).length) {
+                $t.append(jQuery('<li class="text-muted">').text('No delivery events (sent directly)'));
+            }
+            var html = f('html')[0];
+            f('pruned').toggleClass('d-none', !e.body_pruned_at);
+            html.srcdoc = e.html_body || '';
+            jQuery(html).toggleClass('d-none', !e.html_body);
+            f('text').text(e.text_body || '').toggleClass('d-none', !!e.html_body || !e.text_body);
+            $m.modal('show');
+        });
+    };
+}
+</script>

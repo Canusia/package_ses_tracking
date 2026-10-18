@@ -22,5 +22,7 @@ urlpatterns = [
 
     path('sns/bounces-complaints/', webhook_views.BouncesComplaintsListView.as_view(), name='bounces-complaints'),
     
-    path('sns/daily_email_stats/', webhook_views.DailyEmailStatsListView.as_view(), name='daily-email-stats')
+    path('sns/daily_email_stats/', webhook_views.DailyEmailStatsListView.as_view(), name='daily-email-stats'),
+
+    path('sent-email/', webhook_views.SentEmailListView.as_view(), name='sent-email'),
 ]

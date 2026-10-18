@@ -1,0 +1,29 @@
+{% extends "cis/logged-base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block body %}
+<main>
+    <div class="row">
+        <div class="col-sm-6 col-xs-12">
+            <h1 class="h3 mb-4 text-gray-800">{{ page_title }}</h1>
+        </div>
+    </div>
+    {% include "cis/messages.html" with messages=messages %}
+    {% if debug_routing_on %}
+    <div class="alert alert-warning">
+        Debug routing is ON: mail goes to the debug lists (Settings → Email Routing by Role),
+        not to the people it was addressed to.
+    </div>
+    {% endif %}
+    {% if open_tracking_quiet %}
+    <div class="alert alert-info">
+        No open events received in 7 days. Is Open enabled on the SES configuration set?
+    </div>
+    {% endif %}
+    <p class="text-muted small">
+        "Opened" is approximate: some mail apps load images for the reader (false opens),
+        and others block them (opens never reported). Plain-text mail can't be tracked.
+    </p>
+    {% include "ses_tracking/sent_email/_table.html" with table_id="sent_email" api_url=api_url show_filters=True %}
+    {% include "ses_tracking/sent_email/_detail_modal.html" %}
+</main>
+{% endblock %}
