@@ -1,4 +1,6 @@
 # ses_tracking/models.py
+import uuid
+
 from django.db import models
 from django.utils import timezone
 
@@ -15,6 +17,7 @@ class SESEvent(models.Model):
         ('rendering_failure', 'Rendering Failure'),
         ('delivery_delay', 'Delivery Delay'),
         ('subscription', 'Subscription'),
+        ('open', 'Open'),
     ]
     
     BOUNCE_TYPES = [
@@ -49,6 +52,12 @@ class SESEvent(models.Model):
     # Campus the mail was sent for (#3), from the event's configuration set
     # via SES_CAMPUS_CONFIG. Blank on single-campus deployments.
     campus_code = models.CharField(max_length=50, blank=True, default='', db_index=True)
+
+    # The sent message this event is about, from the `myce-id` message tag
+    # (sent-email log). Null for older mail and other senders on the set.
+    sent_email = models.ForeignKey(
+        'SentEmail', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='events')
 
     class Meta:
         ordering = ['-timestamp']
@@ -218,3 +227,77 @@ class DailyEmailStats(models.Model):
             return (is_acceptable, stats.bounce_rate, stats)
         except cls.DoesNotExist:
             return (True, 0, None)  # No data yet, assume acceptable
+
+class SentEmail(models.Model):
+    """One outgoing message as it left MyCE, after routing.
+
+    Written by ses_tracking.capture from RoutingBackend.send_messages(); its
+    id travels to SES as the `myce-id` message tag so SNS events can find it.
+    """
+    PATH_QUEUE = 'queue'
+    PATH_DIRECT = 'direct'
+    PATH_CHOICES = [(PATH_QUEUE, 'Queued (django-mailer)'), (PATH_DIRECT, 'Direct')]
+
+    SMTP_SENT = 'sent'
+    SMTP_FAILED = 'failed'
+    SMTP_CHOICES = [(SMTP_SENT, 'Sent'), (SMTP_FAILED, 'Failed')]
+
+    STATUS_CHOICES = [
+        ('sent', 'Sent'), ('delayed', 'Delayed'), ('delivered', 'Delivered'),
+        ('rejected', 'Rejected'), ('bounced', 'Bounced'), ('complained', 'Complained'),
+    ]
+    # Forward-only: an event never moves status to a lower rank, so a late
+    # delivery cannot overwrite a bounce.
+    STATUS_RANK = {'sent': 0, 'delayed': 1, 'delivered': 2,
+                   'rejected': 3, 'bounced': 3, 'complained': 4}
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    original_to = models.JSONField(default=list)
+    original_cc = models.JSONField(default=list)
+    original_bcc = models.JSONField(default=list)
+    delivered_to = models.JSONField(default=list)
+    delivered_cc = models.JSONField(default=list)
+    delivered_bcc = models.JSONField(default=list)
+    # Lower-cased, space-joined union of every original and delivered
+    # address: what search and the person tab match against.
+    search_addresses = models.TextField(blank=True, default='', db_index=True)
+    from_email = models.CharField(max_length=320, blank=True, default='')
+    subject = models.CharField(max_length=998, blank=True, default='', db_index=True)
+    text_body = models.TextField(null=True, blank=True)
+    html_body = models.TextField(null=True, blank=True)
+    body_pruned_at = models.DateTimeField(null=True, blank=True)
+    path = models.CharField(max_length=10, choices=PATH_CHOICES)
+    campus_code = models.CharField(max_length=50, blank=True, default='', db_index=True)
+    debug_routed = models.BooleanField(default=False)
+    sent_at = models.DateTimeField(default=timezone.now, db_index=True)
+    smtp_status = models.CharField(max_length=10, choices=SMTP_CHOICES, blank=True, default='')
+    smtp_error = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='sent', db_index=True)
+    first_opened_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    open_count = models.PositiveIntegerField(default=0)
+    # SES can only track opens in mail with an HTML part.
+    trackable = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-sent_at']
+        verbose_name = 'Sent email'
+        permissions = [('view_sent_email', 'Can view sent email')]
+
+    def __str__(self):
+        return f'{self.subject} -> {", ".join(self.delivered_to)}'
+
+    def advance(self, status):
+        """Move status forward to `status`; return False if that would go back."""
+        if self.STATUS_RANK.get(status, -1) <= self.STATUS_RANK.get(self.status, 0):
+            return False
+        self.status = status
+        self.save(update_fields=['status'])
+        return True
+
+    def record_open(self, when):
+        self.open_count += 1
+        fields = ['open_count']
+        if self.first_opened_at is None:
+            self.first_opened_at = when
+            fields.append('first_opened_at')
+        self.save(update_fields=fields)
