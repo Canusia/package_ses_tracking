@@ -7,6 +7,7 @@ from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbid
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .models import SESEvent
+from .events import link
 import boto3
 from django.conf import settings
 
@@ -469,6 +470,8 @@ def sns_endpoint(request):
                 handle_delivery_delay(ses_message)
             elif event_type == 'subscription':
                 handle_subscription(ses_message)
+            elif event_type == 'open':
+                handle_open(ses_message)
             else:
                 logger.warning(f"Unknown event type: {event_type}")
             
@@ -500,7 +503,7 @@ def handle_bounce(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in bounce.get('bouncedRecipients', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='bounce',
             message_id=mail.get('messageId', ''),
             email=recipient.get('emailAddress', ''),
@@ -509,6 +512,7 @@ def handle_bounce(message):
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Bounce recorded: {recipient.get('emailAddress')}")
 
 
@@ -524,7 +528,7 @@ def handle_complaint(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in complaint.get('complainedRecipients', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='complaint',
             message_id=mail.get('messageId', ''),
             email=recipient.get('emailAddress', ''),
@@ -532,6 +536,7 @@ def handle_complaint(message):
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Complaint recorded: {recipient.get('emailAddress')}")
 
 
@@ -547,13 +552,14 @@ def handle_delivery(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in delivery.get('recipients', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='delivery',
             message_id=mail.get('messageId', ''),
             email=recipient,
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Delivery recorded: {recipient}")
 
 
@@ -567,13 +573,14 @@ def handle_send(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in mail.get('destination', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='send',
             message_id=mail.get('messageId', ''),
             email=recipient,
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Send recorded: {recipient}")
 
 
@@ -588,7 +595,7 @@ def handle_reject(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in mail.get('destination', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='reject',
             message_id=mail.get('messageId', ''),
             email=recipient,
@@ -596,6 +603,7 @@ def handle_reject(message):
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Reject recorded: {recipient} - {reject.get('reason')}")
 
 
@@ -610,7 +618,7 @@ def handle_rendering_failure(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in mail.get('destination', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='rendering_failure',
             message_id=mail.get('messageId', ''),
             email=recipient,
@@ -618,6 +626,7 @@ def handle_rendering_failure(message):
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Rendering failure recorded: {recipient}")
 
 
@@ -632,14 +641,43 @@ def handle_delivery_delay(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for recipient in delay.get('delayedRecipients', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='delivery_delay',
             message_id=mail.get('messageId', ''),
             email=recipient.get('emailAddress', ''),
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Delivery delay recorded: {recipient.get('emailAddress')}")
+
+
+def handle_open(message):
+    """Process open notifications (SES open tracking).
+
+    SNS delivers at least once, so a repeat of the same message and
+    timestamp is ignored rather than counted twice.
+    """
+    from dateutil import parser as date_parser
+    from email.utils import getaddresses
+
+    opened = message.get('open', {})
+    mail = message.get('mail', {})
+    timestamp_str = opened.get('timestamp') or mail.get('timestamp')
+    timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
+    message_id = mail.get('messageId', '')
+
+    if SESEvent.objects.filter(event_type='open', message_id=message_id,
+                               timestamp=timestamp).exists():
+        return
+
+    recipients = (mail.get('commonHeaders') or {}).get('to') or mail.get('destination') or ['']
+    address = (getaddresses([recipients[0]]) or [('', '')])[0][1]
+    event = SESEvent.objects.create(
+        event_type='open', message_id=message_id, email=address,
+        timestamp=timestamp, raw_message=message)
+    link(event)
+    logger.info(f"Open recorded: {address}")
 
 
 def handle_subscription(message):
@@ -653,13 +691,14 @@ def handle_subscription(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     
     for contact in subscription.get('contactList', {}).get('contacts', []):
-        SESEvent.objects.create(
+        event = SESEvent.objects.create(
             event_type='subscription',
             message_id=mail.get('messageId', ''),
             email=contact.get('emailAddress', ''),
             timestamp=timestamp,
             raw_message=message
         )
+        link(event)
         logger.info(f"Subscription recorded: {contact.get('emailAddress')}")
 
 from django.utils.safestring import mark_safe
