@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views as api_views
 from . import views as webhook_views
+from . import api
 
 
 app_name = 'ses_tracking'
@@ -10,6 +11,7 @@ app_name = 'ses_tracking'
 router = DefaultRouter()
 router.register(r'stats', api_views.DailyEmailStatsViewSet, basename='daily-stats')
 router.register(r'events', api_views.SESEventViewSet, basename='ses-events')
+router.register(r'sent-email', api.SentEmailViewSet, basename='sent-email')
 
 urlpatterns = [
     # Webhook endpoint (existing)
