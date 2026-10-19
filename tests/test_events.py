@@ -77,3 +77,31 @@ class EventLinkTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.row.refresh_from_db()
         self.assertEqual(self.row.open_count, 1)
+
+
+class OpenDedupeWithoutTimestampTests(TestCase):
+
+    def test_repeat_of_an_open_with_no_timestamps_counts_once(self):
+        row = SentEmail.objects.create(path='queue', delivered_to=['a@x.com'])
+        payload = _ses('Open', row, {'open': {'userAgent': 'x'}})
+        del payload['mail']['timestamp']
+        views.handle_open(payload)
+        views.handle_open(payload)
+        row.refresh_from_db()
+        self.assertEqual(row.open_count, 1)
+
+
+class DailyStatsRecipientsTests(TestCase):
+
+    def test_opens_do_not_count_as_extra_recipients(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from ses_tracking.models import DailyEmailStats
+        now = timezone.now()
+        SESEvent.objects.create(event_type='send', message_id='m', email='a@x.com',
+                                timestamp=now, raw_message={})
+        SESEvent.objects.create(event_type='open', message_id='m2', email='old@x.com',
+                                timestamp=now, raw_message={})
+        call_command('aggregate_daily_stats', '--date', timezone.localdate(now).isoformat(),
+                     stdout=StringIO())
+        self.assertEqual(DailyEmailStats.objects.get().unique_recipients, 1)

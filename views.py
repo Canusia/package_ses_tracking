@@ -667,8 +667,10 @@ def handle_open(message):
     timestamp = date_parser.parse(timestamp_str) if timestamp_str else timezone.now()
     message_id = mail.get('messageId', '')
 
-    if SESEvent.objects.filter(event_type='open', message_id=message_id,
-                               timestamp=timestamp).exists():
+    # With no timestamp the fallback is now(), which never repeats: compare
+    # the whole notification instead.
+    repeat = ({'timestamp': timestamp} if timestamp_str else {'raw_message': message})
+    if SESEvent.objects.filter(event_type='open', message_id=message_id, **repeat).exists():
         return
 
     recipients = (mail.get('commonHeaders') or {}).get('to') or mail.get('destination') or ['']

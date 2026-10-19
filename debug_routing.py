@@ -93,6 +93,10 @@ def apply(messages, config):
                         seen.add(target.lower())
                         routed.append(target)
             setattr(message, field, routed)
+        # A custom To/Cc header overrides the rendered header: drop it so the
+        # message shows who it actually went to.
+        for key in [k for k in message.extra_headers if k.lower() in ('to', 'cc')]:
+            del message.extra_headers[key]
         message.subject = (SUBJECT_PREFIX.format(originals[0] if originals else '?')
                            + (message.subject or ''))
         message.extra_headers[ORIGINAL_HEADER] = ', '.join(originals)

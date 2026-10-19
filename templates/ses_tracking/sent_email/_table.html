@@ -43,6 +43,7 @@ Every value from the API is inserted as text (escape()), never as HTML.
 <table id="{{ table_id }}" class="table table-striped responsive" style="width:100%">
     <thead><tr>
         <th data-data="sent_at" data-name="sent_at">Sent</th>
+        <th data-data="from_email" data-name="from_email">From</th>
         <th data-data="delivered_to" data-name="search_addresses">To</th>
         <th data-data="subject" data-name="subject">Subject</th>
         <th data-data="status" data-name="status">Status</th>
@@ -76,6 +77,7 @@ jQuery(function ($) {
         columns: [
             // Dates and status aren't free-text searchable: icontains on them scans every row.
             {searchable: false, render: function (d) { return d ? escape(new Date(d).toLocaleString()) : ''; }},
+            {render: function (d) { return escape(d); }},
             {orderable: false, render: function (d, t, row) {
                 var to = (d || []).join(', ');
                 var was = (row.original_to || []).join(', ');

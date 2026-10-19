@@ -156,6 +156,10 @@ class email_routing(SettingForm):
                 data[name] = _clean_addresses(data.get(name))
             except ValidationError as exc:
                 self.add_error(name, exc)
+        if (self.debug_routing_on and EVERYONE_ELSE not in self.errors
+                and not data.get(EVERYONE_ELSE)):
+            self.add_error(EVERYONE_ELSE, 'Required while debug routing is on: without it, '
+                                          'mail for anyone not covered above is not sent.')
         return data
 
     def _to_python(self):

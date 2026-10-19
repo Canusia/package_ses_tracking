@@ -51,3 +51,34 @@ class TabRegistrationTests(TestCase):
         user = SimpleNamespace(email='p@x.com', secondary_email='', alt_email='alt@y.com')
         ctx = emails_tab(None, SimpleNamespace(pk='abc', user=user))
         self.assertIn('person=p@x.com,alt@y.com', ctx['api_url'])
+
+
+class TabRegistrationErrorTests(TestCase):
+
+    def test_missing_registry_module_is_skipped_quietly(self):
+        from unittest.mock import patch
+        from ses_tracking import tabs
+        with patch.object(tabs, 'REGISTRIES', (('myce.component_registry.nope', 'x_tabs'),)), \
+                self.assertNoLogs('ses_tracking.tabs', level='ERROR'):
+            tabs.register()
+
+    def test_broken_registry_module_is_logged_not_hidden(self):
+        from unittest.mock import patch
+        from ses_tracking import tabs
+
+        def broken(path):
+            raise ImportError('cannot import name Thing from cis.models')
+
+        with patch.object(tabs, 'REGISTRIES', (('myce.component_registry.student', 'student_tabs'),)), \
+                patch('ses_tracking.tabs.importlib.import_module', side_effect=broken), \
+                self.assertLogs('ses_tracking.tabs', level='ERROR'):
+            tabs.register()
+
+
+class FromColumnTests(TestCase):
+
+    def test_table_has_a_searchable_from_column(self):
+        from django.template.loader import render_to_string
+        html = render_to_string('ses_tracking/sent_email/_table.html',
+                                {'table_id': 't', 'api_url': '/x/'})
+        self.assertIn('data-name="from_email"', html)

@@ -185,7 +185,8 @@ message: a capture error is logged and the mail goes out untagged.
   several Campus rows but stamp no campus on mail, so they get no dropdown.
 - **Emails tab:** registered from `apps.ready()` (`tabs.py`) on the student, teacher and
   hs_administrator registries in the tenant's `myce/component_registry`, when present.
-- **Opens are approximate** and need an HTML part (`SentEmail.trackable`).
+- **Opens are approximate** and need an HTML part (`SentEmail.trackable`). Daily stats' `unique_recipients`
+  excludes opens (they arrive on later days).
 - **Stored bodies never hold live credentials.** Anyone with `view_sent_email` can read
   them, so Django password-reset links (`password_reset/<uidb64>/<token>/`) are replaced
   with `[link removed]` in the stored copy (the recipient still gets the real link). Add
@@ -228,4 +229,6 @@ Lists are fields on the **Email Routing by Role** setting (`debug_lists`,
 `debug_everyone_else`). **Fails closed:** an empty result drops that recipient (WARNING log);
 a message left with nobody is not sent; an unsaved setting drops all mail. Redirected mail
 gets the subject prefix `[STAGING → <first original address>]` and `X-MyCE-Original-To`, and
-`SentEmail.debug_routed=True`. Set the lists on staging **before** deploying with the switch on.
+`SentEmail.debug_routed=True`; custom `To`/`Cc` headers are removed so the message shows
+who it really went to. While the switch is on, the setting form requires the everyone-else
+list. Set the lists on staging **before** deploying with the switch on.

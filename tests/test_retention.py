@@ -36,6 +36,12 @@ class PruneTests(TestCase):
         self.assertFalse(SentEmail.objects.filter(pk=old.pk).exists())
         self.assertFalse(SESEvent.objects.filter(message_id='m').exists())
 
+    def test_rows_due_for_deletion_are_not_cleared_first(self):
+        self._row(731)
+        out = StringIO()
+        call_command('prune_sent_email', stdout=out)
+        self.assertIn('cleared 0 bodies, deleted 1 records', out.getvalue())
+
     def test_dry_run_changes_nothing(self):
         old = self._row(800)
         out = StringIO()

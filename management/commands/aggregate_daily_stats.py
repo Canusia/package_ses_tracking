@@ -83,7 +83,9 @@ class Command(BaseCommand):
         )
         
         # Unique recipients
-        unique_recipients = events.values('email').distinct().count()
+        # Opens (v4.5.0) arrive days after the send; counting them would add
+        # an earlier day's recipients to this one.
+        unique_recipients = events.exclude(event_type='open').values('email').distinct().count()
         
         # Combine all stats
         all_stats = {

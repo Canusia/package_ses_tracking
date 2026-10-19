@@ -31,10 +31,11 @@ class Command(BaseCommand):
             return
 
         cleared = deleted = 0
-        while ids := list(bodies.values_list('pk', flat=True)[:BATCH]):
-            cleared += SentEmail.objects.filter(pk__in=ids).update(
-                text_body=None, html_body=None, body_pruned_at=now)
+        # Delete first: clearing the bodies of rows about to go is wasted work.
         while ids := list(old.values_list('pk', flat=True)[:BATCH]):
             SESEvent.objects.filter(sent_email_id__in=ids).delete()
             deleted += SentEmail.objects.filter(pk__in=ids).delete()[0]
+        while ids := list(bodies.values_list('pk', flat=True)[:BATCH]):
+            cleared += SentEmail.objects.filter(pk__in=ids).update(
+                text_body=None, html_body=None, body_pruned_at=now)
         self.stdout.write(f'cleared {cleared} bodies, deleted {deleted} records')

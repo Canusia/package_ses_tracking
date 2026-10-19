@@ -147,3 +147,39 @@ class DebugSettingNoticeTests(TestCase):
         text = self._form()
         self.assertNotIn('Debug routing is ON', text)
         self.assertNotIn('inactive', text)
+
+
+@override_settings(EMAIL_BACKEND=ROUTING, SES_TRACKING_ROUTING_INNER_BACKEND=LOCMEM,
+                   SES_TRACKING_DEBUG_ROUTING=True)
+class DebugRoutingHeaderTests(TestCase):
+
+    def setUp(self):
+        mail.outbox = []
+        p = patch('ses_tracking.backend.load_config', return_value=dict(CONFIG))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_custom_to_and_cc_headers_do_not_show_real_addresses(self):
+        EmailMessage('Hello', 'b', 'f@x.com', ['real@x.com'], cc=['realcc@x.com'],
+                     headers={'To': 'Real <real@x.com>', 'cc': 'realcc@x.com'}).send()
+        rendered = mail.outbox[0].message()
+        self.assertNotIn('real@x.com', rendered['To'])
+        self.assertNotIn('realcc@x.com', rendered['Cc'] or '')
+        self.assertIn('qa-other@canusia.com', rendered['To'])
+
+
+class DebugEveryoneElseRequiredTests(TestCase):
+
+    def _form(self, data):
+        from ses_tracking.settings.email_routing import email_routing
+        return email_routing(RequestFactory().get('/?report_id=1'), data=data)
+
+    @override_settings(SES_TRACKING_DEBUG_ROUTING=True)
+    def test_required_while_debug_routing_is_on(self):
+        form = self._form({'mode': 'inactive', 'debug_everyone_else': ''})
+        self.assertFalse(form.is_valid())
+        self.assertIn('debug_everyone_else', form.errors)
+
+    @override_settings(SES_TRACKING_DEBUG_ROUTING=False)
+    def test_optional_while_debug_routing_is_off(self):
+        self.assertTrue(self._form({'mode': 'inactive', 'debug_everyone_else': ''}).is_valid())
