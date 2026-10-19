@@ -159,3 +159,33 @@ class TableSearchScopeTests(TestCase):
         js = render_to_string('ses_tracking/sent_email/_table.html', {'table_id': 't', 'api_url': '/x/'})
         # sent_at, status, first_opened_at and the button; To and Subject stay searchable.
         self.assertEqual(js.count('searchable: false'), 4)
+
+
+class SentEmailCampusFilterTests(TestCase):
+    """Multi-campus deployments get a Campus filter on the Sent Email page;
+    single-campus ones don't (one campus has nothing to filter)."""
+
+    def setUp(self):
+        from cis.models import Campus
+        Campus.objects.create(name='Main Campus', code='MAIN')
+        Campus.objects.create(name='North Campus', code='NORTH')
+        self.c = _client(_user('cecampus', perm=True))
+
+    def test_multi_campus_page_lists_every_campus(self):
+        # Patched, not MULTI_CAMPUS=True: that also turns on the cis host gate,
+        # which refuses the test client's unassigned host.
+        from unittest.mock import patch
+        with patch('ses_tracking.campus_mail.multi_campus', return_value=True):
+            html = self.c.get(PAGE).content.decode()
+        self.assertIn('data-param="campus"', html)
+        self.assertIn('<option value="NORTH">North Campus</option>', html)
+        self.assertIn('<option value="MAIN">Main Campus</option>', html)
+
+    def test_single_campus_page_has_no_campus_filter(self):
+        self.assertNotIn('data-param="campus"', self.c.get(PAGE).content.decode())
+
+    def test_api_campus_filter_returns_only_that_campus(self):
+        SentEmail.objects.create(path='queue', subject='North mail', campus_code='NORTH')
+        SentEmail.objects.create(path='queue', subject='Main mail', campus_code='MAIN')
+        rows = _rows(self.c.get(API, {'campus': 'NORTH'}))
+        self.assertEqual([r['subject'] for r in rows], ['North mail'])

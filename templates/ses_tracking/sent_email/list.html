@@ -23,7 +23,7 @@
         "Opened" is approximate: some mail apps load images for the reader (false opens),
         and others block them (opens never reported). Plain-text mail can't be tracked.
     </p>
-    {% include "ses_tracking/sent_email/_table.html" with table_id="sent_email" api_url=api_url show_filters=True %}
+    {% include "ses_tracking/sent_email/_table.html" with table_id="sent_email" api_url=api_url show_filters=True campus_choices=campus_choices %}
     {% include "ses_tracking/sent_email/_detail_modal.html" %}
 </main>
 {% endblock %}

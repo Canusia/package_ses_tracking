@@ -1,6 +1,7 @@
 {% comment %}
 Shared Sent Email table (CE page and person Emails tab).
-Context: table_id, api_url (may already carry ?person=...), show_filters.
+Context: table_id, api_url (may already carry ?person=...), show_filters,
+campus_choices ([(code, name)]; the Campus filter shows only when non-empty).
 Every value from the API is inserted as text (escape()), never as HTML.
 {% endcomment %}
 {% if show_filters %}
@@ -27,6 +28,14 @@ Every value from the API is inserted as text (escape()), never as HTML.
                 <select class="form-control form-control-sm {{ table_id }}-filter" id="{{ table_id }}_path" data-param="path">
                     <option value="">Any way</option><option value="queue">Queued</option><option value="direct">Directly</option>
                 </select></div>
+            {% if campus_choices %}
+            <div class="col-md-2"><label class="small" for="{{ table_id }}_campus">Campus</label>
+                <select class="form-control form-control-sm {{ table_id }}-filter" id="{{ table_id }}_campus" data-param="campus">
+                    <option value="">Any campus</option>
+                    {% for code, name in campus_choices %}<option value="{{ code }}">{{ name }}</option>
+                    {% endfor %}
+                </select></div>
+            {% endif %}
         </div>
     </div>
 </div>

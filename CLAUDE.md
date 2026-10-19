@@ -180,6 +180,9 @@ message: a capture error is logged and the mail goes out untagged.
   `address`, `person` (exact addresses, comma-separated), `status`, `opened` (yes/no/na),
   `path`, `campus`, `start_date`, `end_date`. HTML bodies render only in a sandboxed
   `srcdoc` iframe.
+- **Campus filter:** the page shows a Campus dropdown only on multi-campus deployments
+  (`campus_mail.campus_filter_choices()`, from cis `Campus`); single-campus tenants can hold
+  several Campus rows but stamp no campus on mail, so they get no dropdown.
 - **Emails tab:** registered from `apps.ready()` (`tabs.py`) on the student, teacher and
   hs_administrator registries in the tenant's `myce/component_registry`, when present.
 - **Opens are approximate** and need an HTML part (`SentEmail.trackable`).

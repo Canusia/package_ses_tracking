@@ -68,6 +68,31 @@ def current_campus_code():
     return getattr(campus, 'code', None) or None
 
 
+def multi_campus():
+    """True on a multi-campus deployment. Soft dependency on cis."""
+    try:
+        from cis.campus_context import is_multi_campus
+        return is_multi_campus()
+    except Exception:
+        return False
+
+
+def campus_filter_choices():
+    """``[(code, name), ...]`` for the Sent Email Campus filter, by name.
+
+    Empty on single-campus deployments: they can hold several Campus rows
+    but stamp no campus on their mail, so there is nothing to filter.
+    """
+    if not multi_campus():
+        return []
+    try:
+        from cis.models import Campus
+        return list(Campus.objects.order_by('name').values_list('code', 'name'))
+    except Exception:
+        logger.exception('Could not list campuses for the Sent Email filter')
+        return []
+
+
 def _headers(message):
     headers = getattr(message, 'extra_headers', None)
     if headers is None:

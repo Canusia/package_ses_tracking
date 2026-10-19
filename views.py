@@ -755,7 +755,7 @@ class SentEmailListView(View):
     """Sent Email: every message MyCE sent, with delivery status and opens."""
 
     def get(self, request, *args, **kwargs):
-        from . import debug_routing
+        from . import campus_mail, debug_routing
         from .permissions import can_view_sent_email
         from .settings.sent_email import retention
 
@@ -770,4 +770,5 @@ class SentEmailListView(View):
             'body_retention_days': retention()[0],
             'debug_routing_on': debug_routing.is_on(),
             'open_tracking_quiet': open_tracking_health(),
+            'campus_choices': campus_mail.campus_filter_choices(),
         })
